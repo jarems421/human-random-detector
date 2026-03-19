@@ -1,6 +1,5 @@
 import streamlit as st
 import joblib
-import math
 import pandas as pd
 import os
 from datetime import datetime
@@ -13,10 +12,9 @@ scaler = joblib.load("scaler.pkl")
 st.set_page_config(page_title="Human vs Random Detector")
 
 st.title("Human vs Random Sequence Detector")
-
 st.write("Try to predict whether a sequence is human-generated or random.")
 
-# Score
+# Score system
 if "score" not in st.session_state:
     st.session_state.score = 0
 
@@ -29,6 +27,7 @@ guesses = []
 
 st.subheader("Enter sequences and make your prediction")
 
+# Input section
 for i in range(5):
     seq = st.text_input(f"Sequence {i+1}", key=f"seq_{i}")
     guess = st.radio(
@@ -42,7 +41,7 @@ for i in range(5):
 
 st.divider()
 
-
+# Logging function
 def log_result(sequence, p_human, p_random, model_prediction, user_guess):
     file = "analytics.csv"
 
@@ -62,7 +61,7 @@ def log_result(sequence, p_human, p_random, model_prediction, user_guess):
     else:
         df.to_csv(file, index=False)
 
-
+# Prediction
 if st.button("Predict"):
     st.subheader("Results")
 
@@ -73,7 +72,7 @@ if st.button("Predict"):
             continue
 
         if not all(c in "01" for c in seq):
-            st.error(f"Sequence {i+1} invalid (only 0s and 1s)")
+            st.error(f"Sequence {i+1} invalid (only 0s and 1s allowed)")
             continue
 
         features = extract_features(seq)
@@ -88,32 +87,45 @@ if st.button("Predict"):
         st.write(f"Model prediction: {model_prediction}")
         st.write(f"Confidence: {max(p_human, p_random):.2f}")
 
-        # Score logic
+        # Game scoring
         if guesses[i] != model_prediction:
             st.success("You beat the model")
             st.session_state.score += 1
         else:
             st.error("Model was correct")
 
+        # Log result
         log_result(seq, p_human, p_random, model_prediction, guesses[i])
 
         st.divider()
 
-# Analytics
+# Analytics section
 st.divider()
 st.subheader("Model Analytics")
 
-if os.path.exists("analytics.csv"):
-    df = pd.read_csv("analytics.csv")
+try:
+    if os.path.exists("analytics.csv"):
+        df = pd.read_csv("analytics.csv")
 
-    total = len(df)
-    correct = sum(df["model_prediction"] == df["user_guess"])
-    accuracy = correct / total if total > 0 else 0
+        # Check correct schema
+        required_cols = ["model_prediction", "user_guess", "p_human"]
 
-    st.metric("Model Accuracy (based on user guesses)", f"{accuracy:.2f}")
-    st.metric("Total Samples", total)
+        if not all(col in df.columns for col in required_cols):
+            st.write("Old analytics format detected. Resetting data...")
+            os.remove("analytics.csv")
+            st.stop()
 
-    st.line_chart(df["p_human"])
+        total = len(df)
+        correct = sum(df["model_prediction"] == df["user_guess"])
+        accuracy = correct / total if total > 0 else 0
 
-else:
-    st.write("No data yet")
+        st.metric("Model Accuracy (based on user guesses)", f"{accuracy:.2f}")
+        st.metric("Total Samples", total)
+
+        st.line_chart(df["p_human"])
+
+    else:
+        st.write("No analytics data yet")
+
+except Exception as e:
+    st.write("Analytics temporarily unavailable")
