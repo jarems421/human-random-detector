@@ -1,16 +1,30 @@
 import joblib
 import math
+from pathlib import Path
+
 from features import extract_features
 
-model = joblib.load("model.pkl")
+
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+MODEL_PATH = PROJECT_ROOT / "model.pkl"
+SCALER_PATH = PROJECT_ROOT / "scaler.pkl"
+
+model = joblib.load(MODEL_PATH)
+scaler = joblib.load(SCALER_PATH)
 
 
 def predict(sequence):
+    sequence = sequence.strip()
+
     if len(sequence) < 10:
         raise ValueError("Sequence must be at least 10 characters long")
 
+    if not all(char in "01" for char in sequence):
+        raise ValueError("Sequence must contain only 0s and 1s")
+
     features = extract_features(sequence)
-    probs = model.predict_proba([features])[0]
+    scaled_features = scaler.transform([features])
+    probs = model.predict_proba(scaled_features)[0]
 
     return probs  # [P(random), P(human)]
 

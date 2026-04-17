@@ -1,18 +1,24 @@
 import streamlit as st
 import joblib
 import pandas as pd
-import os
+import secrets
 from datetime import datetime
+from pathlib import Path
+
 from features import extract_features
 
-# Load model + scaler
-model = joblib.load("model.pkl")
-scaler = joblib.load("scaler.pkl")
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+MODEL_PATH = PROJECT_ROOT / "model.pkl"
+SCALER_PATH = PROJECT_ROOT / "scaler.pkl"
+ANALYTICS_PATH = PROJECT_ROOT / "analytics.csv"
+
+model = joblib.load(MODEL_PATH)
+scaler = joblib.load(SCALER_PATH)
 
 st.set_page_config(page_title="Human vs Random Detector")
 
 st.title("Human vs Random Sequence Detector")
-st.write("Try to predict whether a sequence is human-generated or random.")
+st.write("Type your own sequences or generate known-random ones, then see how the model responds.")
 
 # Score system
 if "score" not in st.session_state:
@@ -24,12 +30,32 @@ st.divider()
 
 sequences = []
 guesses = []
+actual_labels = []
 
-st.subheader("Enter sequences and make your prediction")
+st.subheader("Collect labeled sequences")
+st.write("For human data, type a sequence yourself and label it Human. For random data, use the generator below.")
+
+if st.button("Generate 5 random sequences"):
+    for i in range(5):
+        st.session_state[f"seq_{i}"] = ''.join(secrets.choice(["0", "1"]) for _ in range(50))
+        st.session_state[f"actual_{i}"] = "Random"
+
+if st.button("Clear sequences"):
+    for i in range(5):
+        st.session_state[f"seq_{i}"] = ""
+        st.session_state[f"actual_{i}"] = "Human"
+        st.session_state[f"guess_{i}"] = "Human"
+
+st.subheader("Label and predict")
 
 # Input section
 for i in range(5):
     seq = st.text_input(f"Sequence {i+1}", key=f"seq_{i}")
+    actual_label = st.radio(
+        f"Actual source for Sequence {i+1}",
+        ["Human", "Random"],
+        key=f"actual_{i}"
+    )
     guess = st.radio(
         f"Your guess for Sequence {i+1}",
         ["Human", "Random"],
@@ -37,17 +63,17 @@ for i in range(5):
     )
 
     sequences.append(seq)
+    actual_labels.append(actual_label)
     guesses.append(guess)
 
 st.divider()
 
 # Logging function
-def log_result(sequence, p_human, p_random, model_prediction, user_guess):
-    file = "analytics.csv"
-
+def log_result(sequence, actual_label, p_human, p_random, model_prediction, user_guess):
     data = {
         "timestamp": datetime.now(),
         "sequence": sequence,
+        "actual_label": actual_label,
         "p_human": p_human,
         "p_random": p_random,
         "model_prediction": model_prediction,
@@ -56,10 +82,10 @@ def log_result(sequence, p_human, p_random, model_prediction, user_guess):
 
     df = pd.DataFrame([data])
 
-    if os.path.exists(file):
-        df.to_csv(file, mode='a', header=False, index=False)
+    if ANALYTICS_PATH.exists():
+        df.to_csv(ANALYTICS_PATH, mode='a', header=False, index=False)
     else:
-        df.to_csv(file, index=False)
+        df.to_csv(ANALYTICS_PATH, index=False)
 
 # Prediction
 if st.button("Predict"):
@@ -84,18 +110,33 @@ if st.button("Predict"):
         model_prediction = "Human" if p_human > p_random else "Random"
 
         st.write(f"Sequence {i+1}")
+        st.write(f"Actual source: {actual_labels[i]}")
         st.write(f"Model prediction: {model_prediction}")
         st.write(f"Confidence: {max(p_human, p_random):.2f}")
 
         # Game scoring
-        if guesses[i] != model_prediction:
+        user_correct = guesses[i] == actual_labels[i]
+        model_correct = model_prediction == actual_labels[i]
+
+        if user_correct and not model_correct:
             st.success("You beat the model")
             st.session_state.score += 1
-        else:
+        elif user_correct and model_correct:
+            st.info("You and the model were both correct")
+        elif not user_correct and model_correct:
             st.error("Model was correct")
+        else:
+            st.warning("Neither prediction matched the label")
 
         # Log result
-        log_result(seq, p_human, p_random, model_prediction, guesses[i])
+        log_result(
+            seq,
+            actual_labels[i],
+            p_human,
+            p_random,
+            model_prediction,
+            guesses[i],
+        )
 
         st.divider()
 
@@ -104,23 +145,26 @@ st.divider()
 st.subheader("Model Analytics")
 
 try:
-    if os.path.exists("analytics.csv"):
-        df = pd.read_csv("analytics.csv")
+    if ANALYTICS_PATH.exists():
+        df = pd.read_csv(ANALYTICS_PATH)
 
         # Check correct schema
-        required_cols = ["model_prediction", "user_guess", "p_human"]
+        required_cols = ["actual_label", "model_prediction", "user_guess", "p_human"]
 
         if not all(col in df.columns for col in required_cols):
-            st.write("Old analytics format detected. Resetting data...")
-            os.remove("analytics.csv")
+            st.write("Old analytics format detected. Resetting data for real labels...")
+            ANALYTICS_PATH.unlink()
             st.stop()
 
         total = len(df)
-        correct = sum(df["model_prediction"] == df["user_guess"])
-        accuracy = correct / total if total > 0 else 0
+        model_correct = sum(df["model_prediction"] == df["actual_label"])
+        user_correct = sum(df["user_guess"] == df["actual_label"])
+        model_accuracy = model_correct / total if total > 0 else 0
+        user_accuracy = user_correct / total if total > 0 else 0
 
-        st.metric("Model Accuracy (based on user guesses)", f"{accuracy:.2f}")
-        st.metric("Total Samples", total)
+        st.metric("Model Accuracy", f"{model_accuracy:.2f}")
+        st.metric("User Accuracy", f"{user_accuracy:.2f}")
+        st.metric("Labeled Samples", total)
 
         st.line_chart(df["p_human"])
 

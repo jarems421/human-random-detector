@@ -5,7 +5,9 @@ from features import extract_features
 
 def run_training():
     print("\nTraining model...\n")
-    import train_model
+    from train_model import train_and_save_model
+
+    train_and_save_model()
 
 
 def run_prediction():
