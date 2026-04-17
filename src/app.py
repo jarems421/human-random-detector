@@ -73,7 +73,7 @@ def predict_sequence(sequence):
 
 def log_result(sequence, actual_label, p_human, p_random, model_prediction, user_guess):
     data = {
-        "timestamp": datetime.now(),
+        "timestamp": datetime.now().isoformat(timespec="seconds"),
         "sequence": sequence,
         "actual_label": actual_label,
         "p_human": p_human,
@@ -94,11 +94,23 @@ def load_analytics():
     if not ANALYTICS_PATH.exists():
         return None, None
 
-    df = pd.read_csv(ANALYTICS_PATH)
+    df = pd.read_csv(
+        ANALYTICS_PATH,
+        dtype={
+            "timestamp": "string",
+            "sequence": "string",
+            "actual_label": "string",
+            "model_prediction": "string",
+            "user_guess": "string",
+        },
+    )
     missing = [col for col in REQUIRED_ANALYTICS_COLUMNS if col not in df.columns]
 
     if missing:
         return df, missing
+
+    df["p_human"] = pd.to_numeric(df["p_human"], errors="coerce")
+    df["p_random"] = pd.to_numeric(df["p_random"], errors="coerce")
 
     return df, None
 
@@ -124,6 +136,16 @@ def show_sequence_features(sequence):
     )
 
     st.dataframe(feature_df, hide_index=True, use_container_width=True)
+
+
+def prepare_recent_rows_for_display(df):
+    recent_rows = df.tail(20).copy()
+
+    for column in ["timestamp", "sequence", "actual_label", "model_prediction", "user_guess"]:
+        if column in recent_rows.columns:
+            recent_rows[column] = recent_rows[column].astype("string")
+
+    return recent_rows
 
 
 model, scaler = load_model_assets()
@@ -190,7 +212,7 @@ with tab_detect:
 
 with tab_collect:
     st.subheader("Collect labeled examples")
-    st.write("Use this when the true source is known. Saved rows are used later for real-data evaluation.")
+    st.write("Use this when the source is known. The model predicts from the sequence only; the source label is saved for evaluation.")
 
     action_col_1, action_col_2 = st.columns([1, 1])
 
@@ -223,11 +245,11 @@ with tab_collect:
 
             with label_col:
                 st.radio(
-                    "Actual source",
+                    "Known source",
                     ["Human", "Random"],
                     key=f"actual_{i}",
                     horizontal=True,
-                    help="Choose Human when you typed it yourself. Choose Random for generated examples.",
+                    help="This is saved for evaluation only. The model does not use it to make its prediction.",
                 )
 
             with guess_col:
@@ -315,4 +337,8 @@ with tab_analytics:
         st.line_chart(analytics_df["p_human"])
 
         with st.expander("View recent rows"):
-            st.dataframe(analytics_df.tail(20), use_container_width=True, hide_index=True)
+            st.dataframe(
+                prepare_recent_rows_for_display(analytics_df),
+                use_container_width=True,
+                hide_index=True,
+            )

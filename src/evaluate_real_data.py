@@ -132,7 +132,13 @@ def main():
         return 0
 
     try:
-        df = pd.read_csv(ANALYTICS_PATH)
+        df = pd.read_csv(
+            ANALYTICS_PATH,
+            dtype={
+                "sequence": "string",
+                "actual_label": "string",
+            },
+        )
         model = joblib.load(MODEL_PATH)
         scaler = joblib.load(SCALER_PATH)
         evaluation = evaluate_dataframe(df, model, scaler)
