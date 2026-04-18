@@ -5,42 +5,42 @@
   "sequence_length": 50,
   "test_size": 0.2,
   "random_state": 42,
-  "accuracy": 0.7625,
-  "roc_auc": 0.8182625,
+  "accuracy": 0.785,
+  "roc_auc": 0.8327125,
   "confusion_matrix": [
     [
-      185,
-      15
+      187,
+      13
     ],
     [
-      80,
-      120
+      73,
+      127
     ]
   ],
   "classification_report": {
     "random": {
-      "precision": 0.6981132075471698,
-      "recall": 0.925,
-      "f1-score": 0.7956989247311828,
+      "precision": 0.7192307692307692,
+      "recall": 0.935,
+      "f1-score": 0.8130434782608695,
       "support": 200.0
     },
     "human": {
-      "precision": 0.8888888888888888,
-      "recall": 0.6,
-      "f1-score": 0.7164179104477612,
+      "precision": 0.9071428571428571,
+      "recall": 0.635,
+      "f1-score": 0.7470588235294118,
       "support": 200.0
     },
-    "accuracy": 0.7625,
+    "accuracy": 0.785,
     "macro avg": {
-      "precision": 0.7935010482180294,
-      "recall": 0.7625,
-      "f1-score": 0.756058417589472,
+      "precision": 0.8131868131868132,
+      "recall": 0.785,
+      "f1-score": 0.7800511508951407,
       "support": 400.0
     },
     "weighted avg": {
-      "precision": 0.7935010482180292,
-      "recall": 0.7625,
-      "f1-score": 0.7560584175894719,
+      "precision": 0.8131868131868132,
+      "recall": 0.785,
+      "f1-score": 0.7800511508951407,
       "support": 400.0
     }
   }
