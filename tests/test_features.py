@@ -1,9 +1,11 @@
 import pytest
 
 from features import (
+    FEATURE_NAMES,
     alternation_rate,
     balance_deviation,
     entropy,
+    extract_feature_dict,
     extract_features,
     kl_divergence,
     lag1_autocorrelation,
@@ -15,6 +17,16 @@ from features import (
     pattern_break_rate,
     run_count,
 )
+
+
+def test_feature_schema_contract_stays_in_sync():
+    sequence = "0011010101"
+    features = extract_features(sequence)
+    feature_dict = extract_feature_dict(sequence)
+
+    assert len(FEATURE_NAMES) == 13
+    assert len(features) == len(FEATURE_NAMES)
+    assert list(feature_dict) == FEATURE_NAMES
 
 
 def test_extract_features_returns_thirteen_numeric_values():

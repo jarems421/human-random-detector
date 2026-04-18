@@ -71,7 +71,27 @@ flowchart TD
 
 ## Model And Data
 
-The current production model is a Gaussian Naive Bayes classifier trained on synthetic random and synthetic human-like sequences.
+The current production model is a Gaussian Naive Bayes classifier trained on synthetic random and synthetic human-like sequences. I kept this model deliberately simple because the project is built around interpretable statistical features, not deep model complexity.
+
+### Feature Contract
+
+`extract_features()` returns 13 values in the exact order defined by `FEATURE_NAMES`. The tests assert that the feature names, feature dictionary, and extracted vector stay in sync.
+
+| # | Feature |
+|---:|---|
+| 1 | entropy |
+| 2 | markov_entropy |
+| 3 | kl_divergence |
+| 4 | longest_run |
+| 5 | alternation_rate |
+| 6 | balance_deviation |
+| 7 | lag1_autocorrelation |
+| 8 | run_count |
+| 9 | mean_run_length |
+| 10 | alternation_deviation |
+| 11 | longest_alternating_run |
+| 12 | near_alternation_score |
+| 13 | pattern_break_rate |
 
 The random class is generated with true random bit selection. The human class is generated from weighted behaviors:
 
@@ -104,6 +124,23 @@ The stronger check was real app data. Against 378 labeled Supabase rows, the upg
 | Random recall | 0.903 | 0.919 |
 
 The model kept human recall stable while reducing false human predictions on random sequences.
+
+Current synthetic confusion matrix:
+
+| Actual \ Predicted | Random | Human |
+|---|---:|---:|
+| Random | 187 | 13 |
+| Human | 35 | 165 |
+
+Figure 3: Evaluation surfaces
+
+```mermaid
+flowchart LR
+    A[Synthetic holdout report] --> C[Model sanity check]
+    B[Supabase real-data report] --> C
+    D[Calibration buckets] --> C
+    E[Real-vs-synthetic feature comparison] --> C
+```
 
 ## Project Structure
 
@@ -147,6 +184,19 @@ python src/train_model.py
 python -m py_compile src\app.py src\features.py src\evaluate_real_data.py src\analyze_real_patterns.py src\explanations.py src\analytics_summary.py src\calibration.py src\compare_synthetic_real.py src\train_model.py
 .\venv\Scripts\python.exe -m pytest
 ```
+
+Expected result:
+
+```text
+43 passed
+```
+
+## Limitations
+
+- The production model is trained on synthetic data; real submitted data is currently used for evaluation and generator tuning rather than production retraining.
+- Real-data evaluation depends on having enough labeled Supabase rows, so its strength improves as more people use the app.
+- Explanation cards are heuristic descriptions of sequence patterns, not psychological diagnoses or exact causal explanations of model probabilities.
+- Probabilities are reported with calibration diagnostics, but the production classifier is not recalibrated yet.
 
 ## Supabase Notes
 
