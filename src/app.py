@@ -717,8 +717,18 @@ def show_analytics_tab():
     try:
         summary, missing_columns = load_public_analytics_summary()
     except requests.RequestException as exc:
-        st.error(f"Could not load aggregate analytics: {exc}")
-        st.stop()
+        st.warning("Aggregate analytics are not ready yet.")
+
+        if is_missing_public_summary_view(exc):
+            st.write(
+                "The Supabase view `analytics_public_summary` was not found. "
+                "Run the SQL in `supabase_schema.sql` from the Supabase SQL Editor, "
+                "then reboot the Streamlit app."
+            )
+        else:
+            st.write(f"Supabase returned: {exc}")
+
+        return
 
     if missing_columns:
         st.warning("analytics.csv uses an older format and cannot be summarized until it is reset or migrated.")
@@ -726,7 +736,7 @@ def show_analytics_tab():
         if st.button("Reset analytics.csv", type="primary"):
             ANALYTICS_PATH.unlink()
             st.success("analytics.csv was reset.")
-            st.stop()
+            st.rerun()
 
         return
 
@@ -759,6 +769,15 @@ def format_optional(value, fallback="Not enough data"):
         return fallback
 
     return f"{value:.2f}"
+
+
+def is_missing_public_summary_view(exc):
+    response = getattr(exc, "response", None)
+
+    if response is not None and response.status_code == 404:
+        return True
+
+    return "404" in str(exc) and PUBLIC_SUMMARY_VIEW in str(exc)
 
 
 def show_about_tab():
