@@ -133,7 +133,7 @@ def insert_supabase_result(data):
         "p_human": data["p_human"],
         "p_random": data["p_random"],
         "model_prediction": data["model_prediction"],
-        "user_guess": data["user_guess"],
+        "user_guess": data["user_guess"] or None,
     }
     headers = get_supabase_headers(config)
     headers["Prefer"] = "return=minimal"
@@ -366,6 +366,7 @@ with tab_collect:
             help="Blank lines are ignored. Spaces inside a sequence are okay.",
         )
         st.caption("Tip: type several attempts in a notes app or text editor, then paste them here together.")
+        st.caption("These rows do not count toward User accuracy because no separate guess is being collected.")
 
         if st.button("Save Human Sequences", type="primary", width="stretch"):
             saved_rows = 0
@@ -386,7 +387,7 @@ with tab_collect:
                     result = save_collected_sequence(
                         sequence=sequence,
                         actual_label="Human",
-                        user_guess="Human",
+                        user_guess=None,
                     )
                 except requests.RequestException as exc:
                     st.error(f"Could not save line {line_number} to Supabase: {exc}")
@@ -415,6 +416,7 @@ with tab_collect:
             step=1,
             help="Generated rows are automatically labeled Random.",
         )
+        st.caption("Generated rows do not count toward User accuracy because no separate guess is being collected.")
 
         if st.button("Generate And Save Random Rows", type="primary", width="stretch"):
             saved_rows = 0
@@ -426,7 +428,7 @@ with tab_collect:
                     save_collected_sequence(
                         sequence=sequence,
                         actual_label="Random",
-                        user_guess="Random",
+                        user_guess=None,
                     )
                 except requests.RequestException as exc:
                     st.error(f"Could not save generated row to Supabase: {exc}")
@@ -440,7 +442,8 @@ with tab_collect:
             else:
                 st.error("No random rows were saved.")
 
-    with st.expander("Advanced: review or edit five examples before saving"):
+    with st.expander("Advanced: collect guesses for five examples"):
+        st.write("Use this only when you want to record a separate user guess before saving.")
         action_col_1, action_col_2 = st.columns([1, 1])
 
         with action_col_1:
@@ -557,14 +560,19 @@ with tab_analytics:
     else:
         total = len(analytics_df)
         model_correct = analytics_df["model_prediction"] == analytics_df["actual_label"]
-        user_correct = analytics_df["user_guess"] == analytics_df["actual_label"]
+        guessed_rows = analytics_df["user_guess"].isin(["Human", "Random"])
+        user_correct = analytics_df.loc[guessed_rows, "user_guess"] == analytics_df.loc[guessed_rows, "actual_label"]
         model_accuracy = model_correct.mean() if total else 0
-        user_accuracy = user_correct.mean() if total else 0
+        user_accuracy = user_correct.mean() if guessed_rows.any() else None
 
         metric_col_1, metric_col_2, metric_col_3 = st.columns(3)
         metric_col_1.metric("Labeled samples", total)
         metric_col_2.metric("Model accuracy", f"{model_accuracy:.2f}")
-        metric_col_3.metric("User accuracy", f"{user_accuracy:.2f}")
+        metric_col_3.metric(
+            "User accuracy",
+            "No guesses" if user_accuracy is None else f"{user_accuracy:.2f}",
+        )
+        st.caption(f"User accuracy only uses rows where someone made a separate guess. Guessed rows: {int(guessed_rows.sum())}.")
 
         label_counts = analytics_df["actual_label"].value_counts()
         human_count = int(label_counts.get("Human", 0))
