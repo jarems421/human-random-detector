@@ -152,7 +152,7 @@ def get_supabase_headers(config):
 def load_supabase_dataframe(config):
     endpoint = f"{config['url']}/rest/v1/{SUPABASE_TABLE}"
     params = {
-        "select": "sequence,actual_label",
+        "select": "sequence,actual_label,session_id,batch_id,batch_position",
         "order": "created_at.asc",
     }
     response = requests.get(

@@ -2,6 +2,7 @@ from datetime import datetime
 from pathlib import Path
 import os
 import secrets
+import uuid
 
 import joblib
 import pandas as pd
@@ -106,7 +107,17 @@ def predict_sequence(sequence):
     }
 
 
-def log_result(sequence, actual_label, p_human, p_random, model_prediction, user_guess):
+def log_result(
+    sequence,
+    actual_label,
+    p_human,
+    p_random,
+    model_prediction,
+    user_guess,
+    session_id,
+    batch_id,
+    batch_position,
+):
     data = {
         "timestamp": datetime.now().isoformat(timespec="seconds"),
         "sequence": sequence,
@@ -115,6 +126,9 @@ def log_result(sequence, actual_label, p_human, p_random, model_prediction, user
         "p_random": p_random,
         "model_prediction": model_prediction,
         "user_guess": user_guess,
+        "session_id": session_id,
+        "batch_id": batch_id,
+        "batch_position": batch_position,
     }
 
     if supabase_enabled():
@@ -134,6 +148,9 @@ def insert_supabase_result(data):
         "p_random": data["p_random"],
         "model_prediction": data["model_prediction"],
         "user_guess": data["user_guess"] or None,
+        "session_id": data["session_id"],
+        "batch_id": data["batch_id"],
+        "batch_position": data["batch_position"],
     }
     headers = get_supabase_headers(config)
     headers["Prefer"] = "return=minimal"
@@ -156,7 +173,7 @@ def append_csv_result(data):
         df.to_csv(ANALYTICS_PATH, index=False)
 
 
-def save_collected_sequence(sequence, actual_label, user_guess):
+def save_collected_sequence(sequence, actual_label, user_guess, batch_id, batch_position):
     result = predict_sequence(sequence)
 
     log_result(
@@ -166,6 +183,9 @@ def save_collected_sequence(sequence, actual_label, user_guess):
         p_random=result["p_random"],
         model_prediction=result["prediction"],
         user_guess=user_guess,
+        session_id=st.session_state.session_id,
+        batch_id=batch_id,
+        batch_position=batch_position,
     )
 
     return result
@@ -182,7 +202,7 @@ def load_supabase_analytics():
     config = get_supabase_config()
     endpoint = f"{config['url']}/rest/v1/{SUPABASE_TABLE}"
     params = {
-        "select": "created_at,sequence,actual_label,p_human,p_random,model_prediction,user_guess",
+        "select": "created_at,sequence,actual_label,p_human,p_random,model_prediction,user_guess,session_id,batch_id,batch_position",
         "order": "created_at.asc",
     }
     response = requests.get(
@@ -226,6 +246,8 @@ def load_csv_analytics():
             "actual_label": "string",
             "model_prediction": "string",
             "user_guess": "string",
+            "session_id": "string",
+            "batch_id": "string",
         },
     )
 
@@ -281,6 +303,9 @@ model, scaler = load_model_assets()
 
 if "score" not in st.session_state:
     st.session_state.score = 0
+
+if "session_id" not in st.session_state:
+    st.session_state.session_id = str(uuid.uuid4())
 
 for i in range(BATCH_SIZE):
     st.session_state.setdefault(f"seq_{i}", "")
@@ -371,6 +396,8 @@ with tab_collect:
         if st.button("Save Human Sequences", type="primary", width="stretch"):
             saved_rows = 0
             invalid_rows = 0
+            batch_id = str(uuid.uuid4())
+            batch_position = 0
 
             for line_number, raw_sequence in enumerate(human_input.splitlines(), start=1):
                 if not raw_sequence.strip():
@@ -383,11 +410,15 @@ with tab_collect:
                     st.warning(f"Line {line_number}: {error}")
                     continue
 
+                batch_position += 1
+
                 try:
                     result = save_collected_sequence(
                         sequence=sequence,
                         actual_label="Human",
                         user_guess=None,
+                        batch_id=batch_id,
+                        batch_position=batch_position,
                     )
                 except requests.RequestException as exc:
                     st.error(f"Could not save line {line_number} to Supabase: {exc}")
@@ -420,8 +451,9 @@ with tab_collect:
 
         if st.button("Generate And Save Random Rows", type="primary", width="stretch"):
             saved_rows = 0
+            batch_id = str(uuid.uuid4())
 
-            for _ in range(random_count):
+            for batch_position in range(1, random_count + 1):
                 sequence = generate_random_sequence()
 
                 try:
@@ -429,6 +461,8 @@ with tab_collect:
                         sequence=sequence,
                         actual_label="Random",
                         user_guess=None,
+                        batch_id=batch_id,
+                        batch_position=batch_position,
                     )
                 except requests.RequestException as exc:
                     st.error(f"Could not save generated row to Supabase: {exc}")
@@ -491,6 +525,7 @@ with tab_collect:
 
         if st.button("Predict And Save Valid Rows", type="primary", width="stretch"):
             saved_rows = 0
+            batch_id = str(uuid.uuid4())
 
             for i in range(BATCH_SIZE):
                 sequence, error = validate_sequence(st.session_state[f"seq_{i}"])
@@ -508,6 +543,8 @@ with tab_collect:
                         sequence=sequence,
                         actual_label=actual_label,
                         user_guess=user_guess,
+                        batch_id=batch_id,
+                        batch_position=i + 1,
                     )
                 except requests.RequestException as exc:
                     st.error(f"Could not save Example {i + 1} to Supabase: {exc}")
@@ -588,6 +625,14 @@ with tab_analytics:
         label_col_2.metric("Random rows", random_count)
         label_col_3.metric("Human rows to balance", needed_human)
         st.bar_chart(label_counts.rename_axis("label").reset_index(name="rows"), x="label", y="rows")
+
+        if "batch_id" in analytics_df.columns:
+            batches_with_metadata = analytics_df["batch_id"].notna().sum()
+            unique_batches = analytics_df["batch_id"].dropna().nunique()
+            st.write("Batch metadata")
+            batch_col_1, batch_col_2 = st.columns(2)
+            batch_col_1.metric("Rows with batch ID", int(batches_with_metadata))
+            batch_col_2.metric("Tracked batches", int(unique_batches))
 
         st.write("Human probability over collected samples")
         st.line_chart(analytics_df["p_human"])
