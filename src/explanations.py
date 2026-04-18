@@ -1,6 +1,23 @@
 from collections import Counter
 
-from features import extract_feature_dict, ones_fraction
+from features import extract_features, ones_fraction
+
+
+FEATURE_NAMES = [
+    "entropy",
+    "markov_entropy",
+    "kl_divergence",
+    "longest_run",
+    "alternation_rate",
+    "balance_deviation",
+    "lag1_autocorrelation",
+    "run_count",
+    "mean_run_length",
+    "alternation_deviation",
+    "longest_alternating_run",
+    "near_alternation_score",
+    "pattern_break_rate",
+]
 
 
 def explain_sequence(sequence, max_signals=5):
@@ -152,3 +169,7 @@ def dedupe_signals(signals):
             by_tag[signal["tag"]] = signal
 
     return list(by_tag.values())
+
+
+def extract_feature_dict(sequence):
+    return dict(zip(FEATURE_NAMES, extract_features(sequence)))
