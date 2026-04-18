@@ -1,9 +1,11 @@
 import json
+import os
 from pathlib import Path
 
 import joblib
 import numpy as np
 import pandas as pd
+import requests
 from sklearn.metrics import accuracy_score, classification_report, confusion_matrix, roc_auc_score
 
 from features import extract_features
@@ -14,6 +16,7 @@ MODEL_PATH = PROJECT_ROOT / "model.pkl"
 SCALER_PATH = PROJECT_ROOT / "scaler.pkl"
 ANALYTICS_PATH = PROJECT_ROOT / "analytics.csv"
 REPORT_PATH = PROJECT_ROOT / "real_data_evaluation.json"
+SUPABASE_TABLE = "analytics"
 
 REQUIRED_COLUMNS = {"sequence", "actual_label"}
 LABEL_MAP = {"Random": 0, "Human": 1}
@@ -126,24 +129,72 @@ def print_evaluation(evaluation):
     print(pd.DataFrame(evaluation["classification_report"]).transpose())
 
 
-def main():
-    if not ANALYTICS_PATH.exists():
-        print("No analytics.csv found. Collect labeled samples in the app first.")
-        return 0
+def get_supabase_config():
+    url = os.getenv("SUPABASE_URL")
+    key = os.getenv("SUPABASE_KEY")
 
+    if not url or not key:
+        return None
+
+    return {
+        "url": url.rstrip("/"),
+        "key": key,
+    }
+
+
+def get_supabase_headers(config):
+    return {
+        "apikey": config["key"],
+        "Authorization": f"Bearer {config['key']}",
+    }
+
+
+def load_supabase_dataframe(config):
+    endpoint = f"{config['url']}/rest/v1/{SUPABASE_TABLE}"
+    params = {
+        "select": "sequence,actual_label",
+        "order": "created_at.asc",
+    }
+    response = requests.get(
+        endpoint,
+        headers=get_supabase_headers(config),
+        params=params,
+        timeout=10,
+    )
+    response.raise_for_status()
+    return pd.DataFrame(response.json())
+
+
+def load_csv_dataframe():
+    return pd.read_csv(
+        ANALYTICS_PATH,
+        dtype={
+            "sequence": "string",
+            "actual_label": "string",
+        },
+    )
+
+
+def main():
     try:
-        df = pd.read_csv(
-            ANALYTICS_PATH,
-            dtype={
-                "sequence": "string",
-                "actual_label": "string",
-            },
-        )
+        supabase_config = get_supabase_config()
+
+        if supabase_config:
+            df = load_supabase_dataframe(supabase_config)
+        elif ANALYTICS_PATH.exists():
+            df = load_csv_dataframe()
+        else:
+            print("No analytics.csv found. Collect labeled samples in the app first.")
+            return 0
+
         model = joblib.load(MODEL_PATH)
         scaler = joblib.load(SCALER_PATH)
         evaluation = evaluate_dataframe(df, model, scaler)
     except ValueError as exc:
         print(exc)
+        return 1
+    except requests.RequestException as exc:
+        print(f"Could not load Supabase analytics: {exc}")
         return 1
 
     REPORT_PATH.write_text(json.dumps(evaluation, indent=2), encoding="utf-8")

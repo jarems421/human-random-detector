@@ -1,9 +1,11 @@
 from datetime import datetime
 from pathlib import Path
+import os
 import secrets
 
 import joblib
 import pandas as pd
+import requests
 import streamlit as st
 
 from features import extract_features
@@ -21,6 +23,7 @@ REQUIRED_ANALYTICS_COLUMNS = [
     "user_guess",
     "p_human",
 ]
+SUPABASE_TABLE = "analytics"
 
 
 st.set_page_config(
@@ -39,6 +42,38 @@ def load_model_assets():
 
 def generate_random_sequence(length=SEQUENCE_LENGTH):
     return "".join(secrets.choice(["0", "1"]) for _ in range(length))
+
+
+def get_secret(name):
+    try:
+        return st.secrets.get(name)
+    except Exception:
+        return None
+
+
+def get_supabase_config():
+    url = get_secret("SUPABASE_URL") or os.getenv("SUPABASE_URL")
+    key = get_secret("SUPABASE_KEY") or os.getenv("SUPABASE_KEY")
+
+    if not url or not key:
+        return None
+
+    return {
+        "url": url.rstrip("/"),
+        "key": key,
+    }
+
+
+def get_supabase_headers(config):
+    return {
+        "apikey": config["key"],
+        "Authorization": f"Bearer {config['key']}",
+        "Content-Type": "application/json",
+    }
+
+
+def supabase_enabled():
+    return get_supabase_config() is not None
 
 
 def clean_sequence(sequence):
@@ -82,6 +117,32 @@ def log_result(sequence, actual_label, p_human, p_random, model_prediction, user
         "user_guess": user_guess,
     }
 
+    if supabase_enabled():
+        insert_supabase_result(data)
+        return
+
+    append_csv_result(data)
+
+
+def insert_supabase_result(data):
+    config = get_supabase_config()
+    endpoint = f"{config['url']}/rest/v1/{SUPABASE_TABLE}"
+    payload = {
+        "sequence": data["sequence"],
+        "actual_label": data["actual_label"],
+        "p_human": data["p_human"],
+        "p_random": data["p_random"],
+        "model_prediction": data["model_prediction"],
+        "user_guess": data["user_guess"],
+    }
+    headers = get_supabase_headers(config)
+    headers["Prefer"] = "return=minimal"
+
+    response = requests.post(endpoint, headers=headers, json=payload, timeout=10)
+    response.raise_for_status()
+
+
+def append_csv_result(data):
     df = pd.DataFrame([data])
 
     if ANALYTICS_PATH.exists():
@@ -91,6 +152,49 @@ def log_result(sequence, actual_label, p_human, p_random, model_prediction, user
 
 
 def load_analytics():
+    if supabase_enabled():
+        return load_supabase_analytics()
+
+    return load_csv_analytics()
+
+
+def load_supabase_analytics():
+    config = get_supabase_config()
+    endpoint = f"{config['url']}/rest/v1/{SUPABASE_TABLE}"
+    params = {
+        "select": "created_at,sequence,actual_label,p_human,p_random,model_prediction,user_guess",
+        "order": "created_at.asc",
+    }
+    response = requests.get(
+        endpoint,
+        headers=get_supabase_headers(config),
+        params=params,
+        timeout=10,
+    )
+    response.raise_for_status()
+
+    df = pd.DataFrame(response.json())
+
+    if df.empty:
+        return pd.DataFrame(
+            columns=[
+                "timestamp",
+                "sequence",
+                "actual_label",
+                "p_human",
+                "p_random",
+                "model_prediction",
+                "user_guess",
+            ]
+        ), None
+
+    if "created_at" in df.columns:
+        df = df.rename(columns={"created_at": "timestamp"})
+
+    return prepare_analytics_dataframe(df)
+
+
+def load_csv_analytics():
     if not ANALYTICS_PATH.exists():
         return None, None
 
@@ -104,6 +208,11 @@ def load_analytics():
             "user_guess": "string",
         },
     )
+
+    return prepare_analytics_dataframe(df)
+
+
+def prepare_analytics_dataframe(df):
     missing = [col for col in REQUIRED_ANALYTICS_COLUMNS if col not in df.columns]
 
     if missing:
@@ -135,7 +244,7 @@ def show_sequence_features(sequence):
         ]
     )
 
-    st.dataframe(feature_df, hide_index=True, use_container_width=True)
+    st.dataframe(feature_df, hide_index=True, width="stretch")
 
 
 def prepare_recent_rows_for_display(df):
@@ -167,6 +276,11 @@ with st.sidebar:
     st.write("Use Collect Data when you know the true source of the sequence.")
     st.metric("Beat-the-model score", st.session_state.score)
 
+    if supabase_enabled():
+        st.success("Saving data to Supabase.")
+    else:
+        st.info("Saving data to local analytics.csv.")
+
 tab_detect, tab_collect, tab_analytics = st.tabs(
     ["Try Detector", "Collect Data", "Analytics"]
 )
@@ -178,11 +292,11 @@ with tab_detect:
     col_generate, col_clear = st.columns([1, 1])
 
     with col_generate:
-        if st.button("Use known-random example", use_container_width=True):
+        if st.button("Use known-random example", width="stretch"):
             st.session_state.try_sequence = generate_random_sequence()
 
     with col_clear:
-        if st.button("Clear", key="clear_try_sequence", use_container_width=True):
+        if st.button("Clear", key="clear_try_sequence", width="stretch"):
             st.session_state.try_sequence = ""
 
     sequence_input = st.text_area(
@@ -196,7 +310,7 @@ with tab_detect:
     cleaned_sequence, error = validate_sequence(sequence_input)
     st.caption(f"Length after cleaning: {len(cleaned_sequence)} bits")
 
-    if st.button("Analyze Sequence", type="primary", use_container_width=True):
+    if st.button("Analyze Sequence", type="primary", width="stretch"):
         if error:
             st.error(error)
         else:
@@ -217,14 +331,14 @@ with tab_collect:
     action_col_1, action_col_2 = st.columns([1, 1])
 
     with action_col_1:
-        if st.button("Generate known-random batch", use_container_width=True):
+        if st.button("Generate known-random batch", width="stretch"):
             for i in range(BATCH_SIZE):
                 st.session_state[f"seq_{i}"] = generate_random_sequence()
                 st.session_state[f"actual_{i}"] = "Random"
                 st.session_state[f"guess_{i}"] = "Random"
 
     with action_col_2:
-        if st.button("Clear batch", use_container_width=True):
+        if st.button("Clear batch", width="stretch"):
             for i in range(BATCH_SIZE):
                 st.session_state[f"seq_{i}"] = ""
                 st.session_state[f"actual_{i}"] = "Human"
@@ -260,7 +374,7 @@ with tab_collect:
                     horizontal=True,
                 )
 
-    if st.button("Predict And Save Valid Rows", type="primary", use_container_width=True):
+    if st.button("Predict And Save Valid Rows", type="primary", width="stretch"):
         saved_rows = 0
 
         for i in range(BATCH_SIZE):
@@ -290,25 +404,35 @@ with tab_collect:
             else:
                 st.warning("Neither prediction matched the label.")
 
-            log_result(
-                sequence=sequence,
-                actual_label=actual_label,
-                p_human=result["p_human"],
-                p_random=result["p_random"],
-                model_prediction=result["prediction"],
-                user_guess=user_guess,
-            )
+            try:
+                log_result(
+                    sequence=sequence,
+                    actual_label=actual_label,
+                    p_human=result["p_human"],
+                    p_random=result["p_random"],
+                    model_prediction=result["prediction"],
+                    user_guess=user_guess,
+                )
+            except requests.RequestException as exc:
+                st.error(f"Could not save Example {i + 1} to Supabase: {exc}")
+                continue
+
             saved_rows += 1
 
         if saved_rows:
-            st.success(f"Saved {saved_rows} labeled row(s) to analytics.csv.")
+            destination = "Supabase" if supabase_enabled() else "analytics.csv"
+            st.success(f"Saved {saved_rows} labeled row(s) to {destination}.")
         else:
             st.error("No valid rows were saved.")
 
 with tab_analytics:
     st.subheader("Collected data")
 
-    analytics_df, missing_columns = load_analytics()
+    try:
+        analytics_df, missing_columns = load_analytics()
+    except requests.RequestException as exc:
+        st.error(f"Could not load Supabase analytics: {exc}")
+        st.stop()
 
     if analytics_df is None:
         st.info("No analytics data yet. Save labeled rows from Collect Data to start tracking performance.")
@@ -339,6 +463,6 @@ with tab_analytics:
         with st.expander("View recent rows"):
             st.dataframe(
                 prepare_recent_rows_for_display(analytics_df),
-                use_container_width=True,
+                width="stretch",
                 hide_index=True,
             )
