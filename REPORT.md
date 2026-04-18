@@ -6,7 +6,7 @@ The first version of this project was a simple idea: train a model to decide whe
 
 Can we measure the specific ways people fail to imitate randomness?
 
-The answer became the shape of the final system. The app now lets users try to fool the model, explains the behavioral patterns in their sequences, logs real submitted data, compares synthetic and real data, and reports calibration alongside ordinary accuracy metrics. A major part of the project is that the real benchmark was not downloaded from a standard dataset; it was collected through the deployed app itself.
+The answer became the shape of the final system. The app now lets users try to fool the model, explains the behavioral patterns in their sequences, logs real submitted data, compares synthetic and real data, and reports calibration alongside ordinary accuracy metrics. A major part of the project is that the real benchmark was not downloaded from a standard dataset; it was collected through the deployed app itself. The current production model is now real-core hybrid trained: real submissions are the main training signal, and synthetic rows provide capped support.
 
 Figure 1: How the project evolved
 
@@ -19,6 +19,7 @@ Figure 1: How the project evolved
 | 5 | Real-data evaluation against the self-collected dataset |
 | 6 | Synthetic generator reweighted from observed behavior |
 | 7 | Challenge mode, explanations, aggregate analytics, calibration, report, and tests |
+| 8 | Real-core hybrid model promoted after held-out real evaluation |
 
 ## 2. Problem And Hypothesis
 
@@ -51,7 +52,9 @@ Real app submission
   -> Supabase logging
   -> self-collected labeled dataset
   -> private real-data evaluation
-  -> generator and report updates
+  -> real-core hybrid training
+  -> promotion gate on held-out real rows
+  -> production artifact update
 ```
 
 The deployed app has five main parts:
@@ -88,7 +91,7 @@ The feature set is intentionally interpretable. The same measurements support bo
 
 The first synthetic human generator used a small set of behaviors selected uniformly. It included too many noisy human examples that looked almost indistinguishable from true random data. That made the synthetic class less focused on the human biases seen in real Supabase data.
 
-The important workflow was not "make synthetic data and trust it." The workflow was "train on controlled synthetic data, collect real user data, test the mismatch, then improve the generator." That self-collected evaluation loop is what made the project more rigorous.
+The important workflow was not "make synthetic data and trust it." The workflow became "train on controlled synthetic data, collect real user data, test the mismatch, improve the generator, then promote a real-core hybrid model only if it beats the baseline on held-out real rows." That self-collected evaluation loop is what made the project more rigorous.
 
 The upgraded generator keeps the random class unchanged and reweights the human class:
 
@@ -112,8 +115,9 @@ Deployed Streamlit challenge
   -> Supabase stores labels, predictions, probabilities, and metadata
   -> private evaluation scripts
   -> real-data metrics and pattern analysis
-  -> generator weights and documentation updates
-  -> retrained model artifacts
+  -> real-core hybrid candidate training
+  -> held-out real promotion gate
+  -> promoted production artifacts
 ```
 
 ## 6. Evaluation Results
@@ -129,18 +133,31 @@ Synthetic holdout metrics improved after the generator upgrade:
 | Random precision | 0.719 | 0.842 | +0.123 |
 | Random recall | 0.935 | 0.935 | 0.000 |
 
-The real test was Supabase data collected through the app. Against 378 labeled real rows:
+The next step was a real-core hybrid training run. The split used a fixed random seed and held out real groups for evaluation. The candidate used 355 real training rows, 354 synthetic support rows, real sample weight `3.0`, and synthetic sample weight `1.0`.
 
-| Metric | Old baseline | Upgraded model | Change |
+| Held-out real metric | Synthetic-only baseline | Real-core hybrid | Change |
 |---|---:|---:|---:|
-| Real-data accuracy | 0.889 | 0.899 | +0.010 |
-| Real-data ROC AUC | 0.958 | 0.944 | -0.014 |
-| Human precision | 0.825 | 0.850 | +0.025 |
-| Human recall | 0.863 | 0.863 | 0.000 |
-| Random precision | 0.925 | 0.927 | +0.002 |
-| Random recall | 0.903 | 0.919 | +0.016 |
+| Accuracy | 0.900 | 0.910 | +0.010 |
+| ROC AUC | 0.907 | 0.945 | +0.038 |
+| Human precision | 0.892 | 0.917 | +0.025 |
+| Human recall | 0.846 | 0.846 | 0.000 |
+| Macro F1 | 0.894 | 0.904 | +0.010 |
 
-The key result is that human recall stayed stable while human precision and random recall improved. That means the upgraded generator did not merely make synthetic testing easier; it also transferred well to real submitted data.
+The candidate passed the promotion gate: human recall stayed stable, macro F1 improved, ROC AUC improved, and human precision improved.
+
+On the full deduplicated private real-data evaluation, the promoted model reached:
+
+| Metric | Value |
+|---|---:|
+| Valid real rows | 455 |
+| Accuracy | 0.910 |
+| ROC AUC | 0.970 |
+| Human precision | 0.937 |
+| Human recall | 0.845 |
+| Random precision | 0.893 |
+| Random recall | 0.958 |
+
+The synthetic holdout remains useful as a check that the promoted model still handles generated examples: accuracy `0.858`, ROC AUC `0.919`.
 
 ## 7. Explainability Layer
 
@@ -174,7 +191,7 @@ This keeps the deployed app useful while reducing unnecessary exposure of user-s
 
 The project now reports calibration diagnostics, including Brier score and confidence buckets. Calibration asks whether the model's probabilities behave like probabilities. If the model says "80% human," then around 80% of those examples should actually be human.
 
-The current production model is not automatically calibrated. The diagnostics are reported first so future calibration can be justified by evidence rather than added by default.
+The current production model is not automatically calibrated. The diagnostics are reported so future calibration can be justified by evidence rather than added by default.
 
 ## 10. Testing
 
@@ -197,15 +214,15 @@ Current verification:
 
 ## 11. Limitations
 
-- The production model is still trained on synthetic data only.
-- The real-data sample is useful but still modest.
+- The production model is real-core hybrid, but the real-data sample is still modest.
+- Synthetic support is still used for class balance and coverage.
 - Explanations are heuristic and should be treated as readable diagnostics.
 - Very short sequences are inherently noisy.
 - User behavior may change after seeing feedback from the app.
 
 ## 12. Future Work
 
-- Add a carefully separated real-data retraining pipeline.
+- Grow the self-collected dataset and rerun the real-core promotion gate.
 - Track model versions across every logged prediction.
 - Add richer charts for feature distributions over time.
 - Evaluate calibration on larger real datasets.
@@ -221,6 +238,7 @@ This project demonstrates more than a classifier. It shows the full loop:
 - model training
 - deployed app
 - real-user data collection
+- real-core hybrid training
 - privacy-aware analytics
 - real-data evaluation
 - explanation UX

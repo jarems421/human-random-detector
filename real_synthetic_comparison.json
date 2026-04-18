@@ -1,0 +1,87 @@
+{
+  "real_rows": 455,
+  "synthetic_rows": 2000,
+  "skipped_real_rows": 13,
+  "skipped": {
+    "short_sequence": 0,
+    "non_binary_sequence": 0,
+    "invalid_label": 0,
+    "duplicate_sequence": 13
+  },
+  "real": {
+    "Human": {
+      "count": 193,
+      "feature_means": {
+        "entropy": 0.9802474839362384,
+        "markov_entropy": 1.674043986623105,
+        "kl_divergence": 0.019752516030373844,
+        "longest_run": 4.367875647668394,
+        "alternation_rate": 0.7366367391457169,
+        "balance_deviation": 0.05074435646444586,
+        "lag1_autocorrelation": -0.5060109758430493,
+        "run_count": 21.7720207253886,
+        "mean_run_length": 1.6295182054659239,
+        "alternation_deviation": 0.26037760995711107,
+        "longest_alternating_run": 10.305699481865284,
+        "near_alternation_score": 0.6432626604087985,
+        "pattern_break_rate": 0.26336326085428297
+      }
+    },
+    "Random": {
+      "count": 262,
+      "feature_means": {
+        "entropy": 0.9849147608464566,
+        "markov_entropy": 1.949953930722552,
+        "kl_divergence": 0.015085239153543447,
+        "longest_run": 5.908396946564886,
+        "alternation_rate": 0.50537466895155,
+        "balance_deviation": 0.05618320610687024,
+        "lag1_autocorrelation": -0.03226750504792039,
+        "run_count": 25.763358778625953,
+        "mean_run_length": 1.9870427818969787,
+        "alternation_deviation": 0.06472970867736406,
+        "longest_alternating_run": 6.038167938931298,
+        "near_alternation_score": 0.558320610687023,
+        "pattern_break_rate": 0.49462533104844997
+      }
+    }
+  },
+  "synthetic": {
+    "Human": {
+      "count": 1000,
+      "feature_means": {
+        "entropy": 0.9915170254310608,
+        "markov_entropy": 1.7915308333326934,
+        "kl_divergence": 0.008482974568939173,
+        "longest_run": 3.591,
+        "alternation_rate": 0.6981020408163265,
+        "balance_deviation": 0.03174000000000001,
+        "lag1_autocorrelation": -0.40880732791829794,
+        "run_count": 35.207,
+        "mean_run_length": 1.488882142533275,
+        "alternation_deviation": 0.21383673469387754,
+        "longest_alternating_run": 10.32,
+        "near_alternation_score": 0.58646,
+        "pattern_break_rate": 0.30189795918367346
+      }
+    },
+    "Random": {
+      "count": 1000,
+      "feature_means": {
+        "entropy": 0.9863321741052412,
+        "markov_entropy": 1.9567929901247931,
+        "kl_divergence": 0.0136678258947588,
+        "longest_run": 5.978,
+        "alternation_rate": 0.49765306122448977,
+        "balance_deviation": 0.054660000000000014,
+        "lag1_autocorrelation": -0.014465490969511993,
+        "run_count": 25.385,
+        "mean_run_length": 2.0098330556342074,
+        "alternation_deviation": 0.05691836734693877,
+        "longest_alternating_run": 5.976,
+        "near_alternation_score": 0.5563800000000001,
+        "pattern_break_rate": 0.5023469387755103
+      }
+    }
+  }
+}

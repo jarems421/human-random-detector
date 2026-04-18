@@ -1,48 +1,101 @@
 {
-  "valid_rows": 378,
-  "skipped_rows": 0,
+  "valid_rows": 455,
+  "skipped_rows": 13,
   "skipped": {
     "short_sequence": 0,
     "non_binary_sequence": 0,
-    "invalid_label": 0
+    "invalid_label": 0,
+    "duplicate_sequence": 13
   },
-  "accuracy": 0.8994708994708994,
-  "roc_auc": 0.944216089254257,
+  "accuracy": 0.9098901098901099,
+  "roc_auc": 0.9701182612822845,
   "confusion_matrix": [
     [
-      227,
-      20
+      251,
+      11
     ],
     [
-      18,
-      113
+      30,
+      163
     ]
   ],
   "classification_report": {
     "random": {
-      "precision": 0.926530612244898,
-      "recall": 0.9190283400809717,
-      "f1-score": 0.9227642276422764,
-      "support": 247.0
+      "precision": 0.8932384341637011,
+      "recall": 0.9580152671755725,
+      "f1-score": 0.9244935543278084,
+      "support": 262.0
     },
     "human": {
-      "precision": 0.849624060150376,
-      "recall": 0.8625954198473282,
-      "f1-score": 0.8560606060606061,
-      "support": 131.0
+      "precision": 0.9367816091954023,
+      "recall": 0.844559585492228,
+      "f1-score": 0.888283378746594,
+      "support": 193.0
     },
-    "accuracy": 0.8994708994708994,
+    "accuracy": 0.9098901098901099,
     "macro avg": {
-      "precision": 0.888077336197637,
-      "recall": 0.89081187996415,
-      "f1-score": 0.8894124168514412,
-      "support": 378.0
+      "precision": 0.9150100216795517,
+      "recall": 0.9012874263339002,
+      "f1-score": 0.9063884665372013,
+      "support": 455.0
     },
     "weighted avg": {
-      "precision": 0.8998778124449446,
-      "recall": 0.8994708994708994,
-      "f1-score": 0.8996473640782584,
-      "support": 378.0
+      "precision": 0.9117083963200051,
+      "recall": 0.9098901098901099,
+      "f1-score": 0.9091340732570955,
+      "support": 455.0
     }
+  },
+  "calibration": {
+    "brier_score": 0.08310821712225538,
+    "buckets": [
+      {
+        "lower": 0.0,
+        "upper": 0.2,
+        "count": 278,
+        "mean_predicted_human": 0.004275178679291615,
+        "actual_human_rate": 0.09712230215827339,
+        "calibration_gap": -0.09284712347898177
+      },
+      {
+        "lower": 0.2,
+        "upper": 0.4,
+        "count": 1,
+        "mean_predicted_human": 0.2998404350797741,
+        "actual_human_rate": 1.0,
+        "calibration_gap": -0.7001595649202259
+      },
+      {
+        "lower": 0.4,
+        "upper": 0.6000000000000001,
+        "count": 2,
+        "mean_predicted_human": 0.4787410683179669,
+        "actual_human_rate": 1.0,
+        "calibration_gap": -0.5212589316820331
+      },
+      {
+        "lower": 0.6000000000000001,
+        "upper": 0.8,
+        "count": 3,
+        "mean_predicted_human": 0.7684510217422557,
+        "actual_human_rate": 0.6666666666666666,
+        "calibration_gap": 0.10178435507558903
+      },
+      {
+        "lower": 0.8,
+        "upper": 1.0,
+        "count": 171,
+        "mean_predicted_human": 0.9974715003225151,
+        "actual_human_rate": 0.9415204678362573,
+        "calibration_gap": 0.05595103248625777
+      }
+    ],
+    "summary": "Predicted human probabilities are somewhat lower than observed human rates."
+  },
+  "group_summary": {
+    "rows_with_session_id": 134,
+    "session_count": 4,
+    "rows_with_batch_id": 134,
+    "batch_count": 7
   }
 }

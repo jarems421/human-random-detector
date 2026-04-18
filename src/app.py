@@ -875,9 +875,10 @@ def show_about_tab():
             {"Metric": "Synthetic accuracy", "Before": 0.785, "After": 0.880},
             {"Metric": "Synthetic ROC AUC", "Before": 0.833, "After": 0.922},
             {"Metric": "Human recall", "Before": 0.635, "After": 0.825},
-            {"Metric": "Real-data accuracy", "Before": 0.889, "After": 0.899},
-            {"Metric": "Real human precision", "Before": 0.825, "After": 0.850},
-            {"Metric": "Real human recall", "Before": 0.863, "After": 0.863},
+            {"Metric": "Held-out real accuracy", "Before": 0.900, "After": 0.910},
+            {"Metric": "Held-out real ROC AUC", "Before": 0.907, "After": 0.945},
+            {"Metric": "Held-out human precision", "Before": 0.892, "After": 0.917},
+            {"Metric": "Held-out human recall", "Before": 0.846, "After": 0.846},
         ]
     )
     st.dataframe(results_df, hide_index=True, width="stretch")
@@ -906,9 +907,9 @@ def show_about_tab():
     st.dataframe(privacy_df, hide_index=True, width="stretch")
 
     st.info(
-        "Current production model: synthetic-only Gaussian Naive Bayes with the "
-        "synthetic-human-v2 data generator. Real submitted data is used for evaluation, "
-        "not production retraining yet."
+        "Current production model: real-core hybrid Gaussian Naive Bayes. Real Supabase "
+        "submissions are the main training signal, with capped synthetic support for "
+        "coverage and class balance."
     )
 
 

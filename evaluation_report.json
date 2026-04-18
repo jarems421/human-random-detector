@@ -1,93 +1,94 @@
 {
+  "evaluation_type": "production_model_on_synthetic_holdout",
+  "model_source": "real_core_hybrid_promoted",
   "samples": 2000,
-  "train_samples": 1600,
   "test_samples": 400,
   "sequence_length": 50,
   "test_size": 0.2,
   "random_state": 42,
-  "accuracy": 0.88,
-  "roc_auc": 0.9218625,
+  "accuracy": 0.8575,
+  "roc_auc": 0.9191125,
   "confusion_matrix": [
     [
-      187,
-      13
+      196,
+      4
     ],
     [
-      35,
-      165
+      53,
+      147
     ]
   ],
   "classification_report": {
     "random": {
-      "precision": 0.8423423423423423,
-      "recall": 0.935,
-      "f1-score": 0.8862559241706162,
+      "precision": 0.7871485943775101,
+      "recall": 0.98,
+      "f1-score": 0.8730512249443207,
       "support": 200.0
     },
     "human": {
-      "precision": 0.9269662921348315,
-      "recall": 0.825,
-      "f1-score": 0.873015873015873,
+      "precision": 0.9735099337748344,
+      "recall": 0.735,
+      "f1-score": 0.8376068376068376,
       "support": 200.0
     },
-    "accuracy": 0.88,
+    "accuracy": 0.8575,
     "macro avg": {
-      "precision": 0.8846543172385869,
-      "recall": 0.88,
-      "f1-score": 0.8796358985932446,
+      "precision": 0.8803292640761722,
+      "recall": 0.8574999999999999,
+      "f1-score": 0.8553290312755792,
       "support": 400.0
     },
     "weighted avg": {
-      "precision": 0.8846543172385869,
-      "recall": 0.88,
-      "f1-score": 0.8796358985932445,
+      "precision": 0.8803292640761723,
+      "recall": 0.8575,
+      "f1-score": 0.8553290312755791,
       "support": 400.0
     }
   },
   "calibration": {
-    "brier_score": 0.10720909114659694,
+    "brier_score": 0.1337078953499252,
     "buckets": [
       {
         "lower": 0.0,
         "upper": 0.2,
-        "count": 216,
-        "mean_predicted_human": 0.004092158727222627,
-        "actual_human_rate": 0.1388888888888889,
-        "calibration_gap": -0.13479673016166627
+        "count": 245,
+        "mean_predicted_human": 0.006941922478375905,
+        "actual_human_rate": 0.20408163265306123,
+        "calibration_gap": -0.19713971017468532
       },
       {
         "lower": 0.2,
         "upper": 0.4,
-        "count": 6,
-        "mean_predicted_human": 0.27967157481379384,
-        "actual_human_rate": 0.8333333333333334,
-        "calibration_gap": -0.5536617585195396
+        "count": 3,
+        "mean_predicted_human": 0.2610149671532996,
+        "actual_human_rate": 0.6666666666666666,
+        "calibration_gap": -0.40565169951336705
       },
       {
         "lower": 0.4,
         "upper": 0.6000000000000001,
         "count": 1,
-        "mean_predicted_human": 0.5022130087570297,
-        "actual_human_rate": 0.0,
-        "calibration_gap": 0.5022130087570297
+        "mean_predicted_human": 0.498013379145832,
+        "actual_human_rate": 1.0,
+        "calibration_gap": -0.501986620854168
       },
       {
         "lower": 0.6000000000000001,
         "upper": 0.8,
-        "count": 3,
-        "mean_predicted_human": 0.6690612539557979,
-        "actual_human_rate": 0.3333333333333333,
-        "calibration_gap": 0.33572792062246454
+        "count": 0,
+        "mean_predicted_human": null,
+        "actual_human_rate": null,
+        "calibration_gap": null
       },
       {
         "lower": 0.8,
         "upper": 1.0,
-        "count": 174,
-        "mean_predicted_human": 0.9947990433191458,
-        "actual_human_rate": 0.9425287356321839,
-        "calibration_gap": 0.05227030768696195
+        "count": 151,
+        "mean_predicted_human": 0.9961022691740091,
+        "actual_human_rate": 0.9735099337748344,
+        "calibration_gap": 0.022592335399174712
       }
     ],
-    "summary": "Predicted human probabilities are somewhat higher than observed human rates."
+    "summary": "Predicted human probabilities are somewhat lower than observed human rates."
   }
 }

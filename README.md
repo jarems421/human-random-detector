@@ -8,7 +8,7 @@ For the full project narrative, evaluation results, and limitations, see [REPORT
 
 ## What This Project Became
 
-This started as a small classifier for binary strings. It grew into a portfolio-grade behavioral ML system with a deployed app, a self-collected Supabase dataset of real user submissions, explainable predictions, real-data evaluation, aggregate analytics, calibration diagnostics, tests, and a written research report.
+This started as a small classifier for binary strings. It grew into a portfolio-grade behavioral ML system with a deployed app, a self-collected Supabase dataset of real user submissions, real-core hybrid training, explainable predictions, aggregate analytics, calibration diagnostics, tests, and a written research report.
 
 Figure 1: Project growth over time
 
@@ -20,6 +20,7 @@ Simple classifier
   -> Own Supabase dataset
   -> Real-data evaluation
   -> Improved synthetic generator
+  -> Real-core hybrid training
   -> Challenge mode and explanations
   -> Aggregate analytics and report
 ```
@@ -53,7 +54,8 @@ Real users enter sequences
   -> Supabase logging
   -> self-collected labeled dataset
   -> private real-data evaluation
-  -> synthetic generator tuning
+  -> real-core hybrid training
+  -> production model promotion gate
 ```
 
 ## Key Features
@@ -63,6 +65,7 @@ Real users enter sequences
 - Plain-language explanation cards
 - Synthetic human data generation based on observed human biases
 - Self-collected Supabase dataset of real submitted data
+- Real-core hybrid training with synthetic support capped at 1:1
 - Aggregate-only public analytics
 - Private real-data evaluation scripts
 - Calibration diagnostics
@@ -71,7 +74,7 @@ Real users enter sequences
 
 ## Model And Data
 
-The current production model is a Gaussian Naive Bayes classifier trained on synthetic random and synthetic human-like sequences. I kept this model deliberately simple because the project is built around interpretable statistical features, not deep model complexity.
+The current production model is a real-core hybrid Gaussian Naive Bayes classifier. Real Supabase submissions are the main training signal, while capped synthetic data provides class-balanced support. I kept the model deliberately simple because the project is built around interpretable statistical features, not deep model complexity.
 
 ### Feature Contract
 
@@ -105,7 +108,7 @@ The random class is generated with true random bit selection. The human class is
 
 ## Results
 
-The synthetic generator upgrade improved holdout performance:
+The first major upgrade improved the synthetic human generator:
 
 | Metric | Before | After |
 |---|---:|---:|
@@ -113,41 +116,50 @@ The synthetic generator upgrade improved holdout performance:
 | Synthetic ROC AUC | 0.833 | 0.922 |
 | Human recall | 0.635 | 0.825 |
 
-The stronger check was real app data. Against 378 labeled Supabase rows, the upgraded model stayed strong:
+The second major upgrade used the self-collected Supabase dataset as the core training signal. A real-core hybrid candidate was promoted after beating the synthetic-only baseline on the same held-out real split:
 
-| Metric | Old baseline | Upgraded model |
+| Held-out real metric | Synthetic-only baseline | Real-core hybrid |
 |---|---:|---:|
-| Real-data accuracy | 0.889 | 0.899 |
-| Real-data ROC AUC | 0.958 | 0.944 |
-| Human precision | 0.825 | 0.850 |
-| Human recall | 0.863 | 0.863 |
-| Random recall | 0.903 | 0.919 |
+| Accuracy | 0.900 | 0.910 |
+| ROC AUC | 0.907 | 0.945 |
+| Human precision | 0.892 | 0.917 |
+| Human recall | 0.846 | 0.846 |
+| Macro F1 | 0.894 | 0.904 |
 
-The model kept human recall stable while reducing false human predictions on random sequences.
+On the full deduplicated private real-data evaluation, the promoted model reached:
+
+| Metric | Value |
+|---|---:|
+| Valid real rows | 455 |
+| Accuracy | 0.910 |
+| ROC AUC | 0.970 |
+| Human precision | 0.937 |
+| Human recall | 0.845 |
+| Random recall | 0.958 |
 
 Figure 3: Synthetic assumptions checked against self-collected data
 
 ```text
-Synthetic training data -> initial model
-Real deployed users     -> Supabase labeled dataset
-Supabase dataset        -> real-data evaluation
-Real-data evaluation    -> generator upgrade
-Generator upgrade       -> retrained production artifacts
+Real deployed users      -> Supabase labeled dataset
+Supabase training split  -> real-core model signal
+Synthetic data           -> capped support rows
+Held-out real split      -> promotion gate
+Promotion passed         -> production artifacts updated
 ```
 
-Current synthetic confusion matrix:
+Current synthetic-holdout check for the promoted production model:
 
 | Actual \ Predicted | Random | Human |
 |---|---:|---:|
-| Random | 187 | 13 |
-| Human | 35 | 165 |
+| Random | 196 | 4 |
+| Human | 53 | 147 |
 
 Figure 4: Evaluation surfaces
 
 | Evaluation surface | Purpose |
 |---|---|
-| Synthetic holdout report | Checks whether the model learned the controlled training task. |
-| Supabase real-data report | Checks whether the model transfers to real user submissions. |
+| Synthetic holdout report | Checks whether the promoted model still handles controlled generated examples. |
+| Supabase real-data report | Checks production performance on self-collected real submissions. |
 | Calibration buckets | Checks whether probabilities are trustworthy. |
 | Real-vs-synthetic feature comparison | Checks whether synthetic assumptions match collected behavior. |
 
@@ -183,6 +195,16 @@ streamlit run src/app.py
 
 ## Reproduce Training
 
+Run the current real-core hybrid training experiment with private Supabase access:
+
+```powershell
+$env:SUPABASE_URL="https://bvgiyyynfnhusgoivdie.supabase.co"
+$env:SUPABASE_SERVICE_ROLE_KEY="your service role key"
+.\venv\Scripts\python.exe src\train_real_core_model.py
+```
+
+The older synthetic-only training script is still available for baseline regeneration:
+
 ```powershell
 python src/train_model.py
 ```
@@ -202,8 +224,8 @@ Expected result:
 
 ## Limitations
 
-- The production model is trained on synthetic data; real submitted data is currently used for evaluation and generator tuning rather than production retraining.
-- Real-data evaluation depends on having enough labeled Supabase rows, so its strength improves as more people use the app.
+- The production model is now real-core hybrid, but the real dataset is still modest and should keep growing.
+- Synthetic support is still used for coverage and class balance, so the project is not purely real-data trained.
 - Explanation cards are heuristic descriptions of sequence patterns, not psychological diagnoses or exact causal explanations of model probabilities.
 - Probabilities are reported with calibration diagnostics, but the production classifier is not recalibrated yet.
 
@@ -215,8 +237,8 @@ To set up the database, run the full contents of [supabase_schema.sql](supabase_
 
 ## What I Learned
 
-- Synthetic data quality matters as much as model choice.
-- Real-data evaluation is the only reliable way to judge whether a synthetic generator matches human behavior.
+- Synthetic data quality matters, but self-collected real data is what decides whether the assumptions hold.
+- Real-data evaluation and promotion gates make the model claims much more defensible.
 - Interpretable features make the app more educational and easier to debug.
 - The psychology is what makes the app memorable: the model reflects back the hidden structure in a user's idea of randomness.
 - Privacy changes affect both the app and the evaluation pipeline.
