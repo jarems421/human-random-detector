@@ -788,6 +788,12 @@ def show_about_tab():
         "them away, and real submissions are used to check whether the synthetic training "
         "data matches human behavior."
     )
+    st.write(
+        "The psychological idea is simple: people often know what randomness should look "
+        "like, but their intuition pushes them toward sequences that feel random rather "
+        "than sequences that behave randomly. The app turns that gap into something you "
+        "can see, test, and measure."
+    )
 
     st.write("Project growth")
     growth_df = pd.DataFrame(
@@ -804,6 +810,10 @@ def show_about_tab():
     st.dataframe(growth_df, hide_index=True, width="stretch")
 
     st.write("What humans tend to do")
+    st.caption(
+        "These patterns are not mistakes in typing. They are small traces of expectation: "
+        "we avoid streaks, seek balance, and add variety because those choices feel random."
+    )
     bias_df = pd.DataFrame(
         [
             {

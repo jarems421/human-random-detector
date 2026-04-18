@@ -27,6 +27,8 @@ flowchart LR
 
 People often make "random" sequences too tidy. They avoid long streaks, alternate too often, keep 0s and 1s too balanced, and reuse short motifs. This project turns those habits into measurable features and a deployed experiment.
 
+The psychological angle is the part that makes the project more than a classifier. The app exposes a small cognitive bias in real time: people know randomness should be messy, but when they try to produce it themselves, they often create patterns that feel random rather than patterns that behave randomly. In that sense, the project is a tiny experiment in human intuition, pattern perception, and control.
+
 The app does not just say "Human" or "Random." It also tells the user why:
 
 - alternation bias
@@ -157,6 +159,7 @@ To set up the database, run the full contents of [supabase_schema.sql](supabase_
 - Synthetic data quality matters as much as model choice.
 - Real-data evaluation is the only reliable way to judge whether a synthetic generator matches human behavior.
 - Interpretable features make the app more educational and easier to debug.
+- The psychology is what makes the app memorable: the model reflects back the hidden structure in a user's idea of randomness.
 - Privacy changes affect both the app and the evaluation pipeline.
 - A small ML model can become a much stronger project when it includes deployment, data collection, testing, and a clear research story.
 

@@ -34,6 +34,10 @@ People tend to make random-looking sequences too orderly. When asked to type 0s 
 
 The hypothesis is that these habits create measurable structure. A model should be able to separate human-made sequences from true random sequences using interpretable statistical features.
 
+The psychological implication is that "randomness" is not only a mathematical property; it is also something people have intuitions about. Those intuitions are often biased toward fairness, balance, and visible variety. A long streak such as `00000` feels suspicious to many people, even though streaks are a normal part of true randomness. This app makes that mismatch visible.
+
+That gives the project a behavioral science layer. The model is not just detecting bad randomness; it is detecting the traces of human expectation, pattern avoidance, and the desire to make disorder look deliberate.
+
 ## 3. System Overview
 
 Figure 2: Prediction and learning loop
@@ -217,3 +221,5 @@ This project demonstrates more than a classifier. It shows the full loop:
 - reproducible tests and reports
 
 That makes it a complete experiment rather than a standalone ML demo.
+
+The psychology also gives the project a memorable hook. Many ML demos classify objects or predict labels, but this one invites the user to participate and then shows them something about their own intuition. That makes the app easier to explain, easier to demo, and more distinctive in a portfolio.
