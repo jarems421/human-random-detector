@@ -148,6 +148,7 @@ def summarize_batches(df):
             "mean_human_batch_size": 0.0,
             "human_batches_with_both_start_bits_pct": 0.0,
             "human_adjacent_start_bit_switch_pct": 0.0,
+            "human_previous_end_to_next_start_switch_pct": 0.0,
         }
 
     batch_df = df.dropna(subset=["batch_id", "batch_position"]).copy()
@@ -161,6 +162,7 @@ def summarize_batches(df):
             "mean_human_batch_size": 0.0,
             "human_batches_with_both_start_bits_pct": 0.0,
             "human_adjacent_start_bit_switch_pct": 0.0,
+            "human_previous_end_to_next_start_switch_pct": 0.0,
         }
 
     batch_df["batch_position"] = pd.to_numeric(batch_df["batch_position"], errors="coerce")
@@ -173,15 +175,24 @@ def summarize_batches(df):
 
     adjacent_pairs = 0
     adjacent_switches = 0
+    cross_sequence_pairs = 0
+    cross_sequence_switches = 0
 
     for _, group in grouped:
         start_bits = group["start_bit"].tolist()
+        sequences = group["sequence"].tolist()
 
         for previous, current in zip(start_bits, start_bits[1:]):
             adjacent_pairs += 1
 
             if previous != current:
                 adjacent_switches += 1
+
+        for previous_sequence, current_sequence in zip(sequences, sequences[1:]):
+            cross_sequence_pairs += 1
+
+            if previous_sequence[-1] != current_sequence[0]:
+                cross_sequence_switches += 1
 
     return {
         "tracked_batch_count": int(df["batch_id"].dropna().nunique()),
@@ -191,6 +202,10 @@ def summarize_batches(df):
         "human_batches_with_both_start_bits_pct": float(batches_with_both_bits.mean()),
         "human_adjacent_start_bit_switch_pct": (
             float(adjacent_switches / adjacent_pairs) if adjacent_pairs else 0.0
+        ),
+        "human_previous_end_to_next_start_switch_pct": (
+            float(cross_sequence_switches / cross_sequence_pairs)
+            if cross_sequence_pairs else 0.0
         ),
     }
 

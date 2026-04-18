@@ -95,3 +95,32 @@ def test_batch_start_bit_switching_uses_position_order():
     assert summary["mean_human_batch_size"] == pytest.approx(3.0)
     assert summary["human_batches_with_both_start_bits_pct"] == pytest.approx(1.0)
     assert summary["human_adjacent_start_bit_switch_pct"] == pytest.approx(0.5)
+
+
+def test_batch_previous_end_to_next_start_switching():
+    df = pd.DataFrame(
+        [
+            {
+                "sequence": "0101010101",
+                "actual_label": "Human",
+                "batch_id": "batch-1",
+                "batch_position": 1,
+            },
+            {
+                "sequence": "0101010100",
+                "actual_label": "Human",
+                "batch_id": "batch-1",
+                "batch_position": 2,
+            },
+            {
+                "sequence": "0101010101",
+                "actual_label": "Human",
+                "batch_id": "batch-1",
+                "batch_position": 3,
+            },
+        ]
+    )
+
+    summary = summarize_batches(df)
+
+    assert summary["human_previous_end_to_next_start_switch_pct"] == pytest.approx(0.5)
