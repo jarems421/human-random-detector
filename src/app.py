@@ -139,7 +139,12 @@ def insert_supabase_result(data):
     headers["Prefer"] = "return=minimal"
 
     response = requests.post(endpoint, headers=headers, json=payload, timeout=10)
-    response.raise_for_status()
+
+    if response.status_code >= 400:
+        raise requests.HTTPError(
+            f"{response.status_code} {response.reason}: {response.text}",
+            response=response,
+        )
 
 
 def append_csv_result(data):
