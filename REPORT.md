@@ -192,7 +192,7 @@ The test suite covers:
 Current verification:
 
 ```text
-44 tests passed
+56 tests passed
 ```
 
 ## 11. Limitations

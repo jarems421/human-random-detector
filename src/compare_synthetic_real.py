@@ -3,15 +3,9 @@ from pathlib import Path
 
 import pandas as pd
 
-from evaluate_real_data import (
-    ANALYTICS_PATH,
-    get_supabase_config,
-    load_csv_dataframe,
-    load_supabase_dataframe,
-    prepare_labeled_dataframe,
-)
 from features import FEATURE_NAMES, extract_feature_dict
 from generate_data import create_dataset
+from real_data import load_real_dataframe, prepare_labeled_dataframe
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -63,20 +57,6 @@ def summarize_by_label(df):
         }
 
     return summary
-
-
-def load_real_dataframe():
-    supabase_config = get_supabase_config()
-
-    if supabase_config:
-        return load_supabase_dataframe(supabase_config)
-
-    if ANALYTICS_PATH.exists():
-        return load_csv_dataframe()
-
-    raise ValueError(
-        "No analytics.csv found and SUPABASE_SERVICE_ROLE_KEY is not set."
-    )
 
 
 def main():

@@ -197,7 +197,7 @@ python -m py_compile src\app.py src\features.py src\evaluate_real_data.py src\an
 Expected result:
 
 ```text
-43 passed
+56 passed
 ```
 
 ## Limitations

@@ -1,83 +1,32 @@
 import json
-import os
 from pathlib import Path
 
 import pandas as pd
 import requests
 
 from features import alternation_rate, longest_run
+from real_data import (
+    ANALYTICS_PATH,
+    get_supabase_config,
+    load_csv_dataframe,
+    load_supabase_dataframe,
+    missing_private_supabase_key,
+    prepare_labeled_dataframe,
+    validate_required_columns,
+)
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
-ANALYTICS_PATH = PROJECT_ROOT / "analytics.csv"
 REPORT_PATH = PROJECT_ROOT / "real_pattern_analysis.json"
-SUPABASE_TABLE = "analytics"
-
-REQUIRED_COLUMNS = {"sequence", "actual_label"}
-VALID_LABELS = {"Human", "Random"}
-
-
-def clean_sequence(sequence):
-    return "".join(str(sequence).split())
-
-
-def validate_required_columns(df):
-    missing = sorted(REQUIRED_COLUMNS - set(df.columns))
-
-    if missing:
-        raise ValueError(f"Missing required analytics columns: {', '.join(missing)}")
 
 
 def prepare_valid_rows(df):
-    validate_required_columns(df)
+    labeled_df, skipped = prepare_labeled_dataframe(df)
 
-    rows = []
-    seen_sequences = set()
-    skipped = {
-        "short_sequence": 0,
-        "non_binary_sequence": 0,
-        "invalid_label": 0,
-        "duplicate_sequence": 0,
-    }
+    if labeled_df.empty:
+        return labeled_df, skipped
 
-    for _, row in df.iterrows():
-        label = row["actual_label"]
-        sequence = row["sequence"]
-
-        if not isinstance(label, str) or label.strip() not in VALID_LABELS:
-            skipped["invalid_label"] += 1
-            continue
-
-        if not isinstance(sequence, str):
-            skipped["non_binary_sequence"] += 1
-            continue
-
-        sequence = clean_sequence(sequence)
-
-        if len(sequence) < 10:
-            skipped["short_sequence"] += 1
-            continue
-
-        if not all(char in "01" for char in sequence):
-            skipped["non_binary_sequence"] += 1
-            continue
-
-        if sequence in seen_sequences:
-            skipped["duplicate_sequence"] += 1
-            continue
-
-        seen_sequences.add(sequence)
-        rows.append(
-            {
-                "sequence": sequence,
-                "actual_label": label.strip(),
-                "session_id": row.get("session_id"),
-                "batch_id": row.get("batch_id"),
-                "batch_position": row.get("batch_position"),
-            }
-        )
-
-    return pd.DataFrame(rows), skipped
+    return labeled_df.drop(columns=["label"]), skipped
 
 
 def starts_with_zero(sequence):
@@ -247,54 +196,6 @@ def print_analysis(analysis):
         print(f"{key}: {value}")
 
 
-def get_supabase_config():
-    url = os.getenv("SUPABASE_URL")
-    key = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
-
-    if not url or not key:
-        return None
-
-    return {
-        "url": url.rstrip("/"),
-        "key": key,
-    }
-
-
-def get_supabase_headers(config):
-    return {
-        "apikey": config["key"],
-        "Authorization": f"Bearer {config['key']}",
-    }
-
-
-def load_supabase_dataframe(config):
-    endpoint = f"{config['url']}/rest/v1/{SUPABASE_TABLE}"
-    params = {
-        "select": "sequence,actual_label,session_id,batch_id,batch_position",
-        "order": "created_at.asc",
-    }
-    response = requests.get(
-        endpoint,
-        headers=get_supabase_headers(config),
-        params=params,
-        timeout=10,
-    )
-    response.raise_for_status()
-    return pd.DataFrame(response.json())
-
-
-def load_csv_dataframe():
-    return pd.read_csv(
-        ANALYTICS_PATH,
-        dtype={
-            "sequence": "string",
-            "actual_label": "string",
-            "session_id": "string",
-            "batch_id": "string",
-        },
-    )
-
-
 def main():
     try:
         supabase_config = get_supabase_config()
@@ -303,7 +204,7 @@ def main():
             df = load_supabase_dataframe(supabase_config)
         elif ANALYTICS_PATH.exists():
             df = load_csv_dataframe()
-        elif os.getenv("SUPABASE_URL") or os.getenv("SUPABASE_KEY"):
+        elif missing_private_supabase_key():
             print(
                 "Raw Supabase pattern analysis requires SUPABASE_SERVICE_ROLE_KEY. "
                 "Set it locally or export analytics.csv."
