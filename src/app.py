@@ -783,20 +783,105 @@ def is_missing_public_summary_view(exc):
 def show_about_tab():
     st.subheader("About the experiment")
     st.write(
-        "People often try to make random-looking sequences by balancing 0s and 1s, "
-        "switching too often, and avoiding long streaks. This project tests those habits."
+        "This began as a simple Human vs Random classifier. It grew into an interactive "
+        "behavioral experiment: users try to fool the model, the app explains what gave "
+        "them away, and real submissions are used to check whether the synthetic training "
+        "data matches human behavior."
     )
-    st.write(
-        "The model is trained on synthetic examples that simulate broad human randomness "
-        "biases, then checked against real submitted data from the app."
+
+    st.write("Project growth")
+    growth_df = pd.DataFrame(
+        [
+            {"Stage": "1", "Milestone": "Simple binary classifier"},
+            {"Stage": "2", "Milestone": "Interpretable feature extraction"},
+            {"Stage": "3", "Milestone": "Supabase real-user data logging"},
+            {"Stage": "4", "Milestone": "Real-data evaluation"},
+            {"Stage": "5", "Milestone": "Synthetic human generator upgrade"},
+            {"Stage": "6", "Milestone": "Challenge mode and explanations"},
+            {"Stage": "7", "Milestone": "Aggregate analytics and report"},
+        ]
     )
-    st.write(
-        "The explanation panel is heuristic: it translates sequence features into readable "
-        "signals so users can see what patterns may have influenced the prediction."
+    st.dataframe(growth_df, hide_index=True, width="stretch")
+
+    st.write("What humans tend to do")
+    bias_df = pd.DataFrame(
+        [
+            {
+                "Human habit": "Alternation bias",
+                "What it means": "Switching 0/1 too often, like 010101...",
+            },
+            {
+                "Human habit": "Streak avoidance",
+                "What it means": "Avoiding long runs such as 0000 or 1111.",
+            },
+            {
+                "Human habit": "Balance seeking",
+                "What it means": "Keeping the number of 0s and 1s too even.",
+            },
+            {
+                "Human habit": "Repeated motifs",
+                "What it means": "Reusing small chunks such as 001 or 101.",
+            },
+            {
+                "Human habit": "Soft bit bias",
+                "What it means": "Favoring one bit slightly more than the other.",
+            },
+        ]
     )
+    st.dataframe(bias_df, hide_index=True, width="stretch")
+
+    st.write("Synthetic human data mix")
+    generator_df = pd.DataFrame(
+        [
+            {"Behavior": "Near-alternating", "Weight": 35},
+            {"Behavior": "Balanced/streak-avoidant", "Weight": 25},
+            {"Behavior": "Chunk-pattern", "Weight": 20},
+            {"Behavior": "Soft-biased", "Weight": 10},
+            {"Behavior": "Noisy/random-like", "Weight": 10},
+        ]
+    )
+    st.bar_chart(generator_df, x="Behavior", y="Weight")
+
+    st.write("Before and after the generator upgrade")
+    results_df = pd.DataFrame(
+        [
+            {"Metric": "Synthetic accuracy", "Before": 0.785, "After": 0.880},
+            {"Metric": "Synthetic ROC AUC", "Before": 0.833, "After": 0.922},
+            {"Metric": "Human recall", "Before": 0.635, "After": 0.825},
+            {"Metric": "Real-data accuracy", "Before": 0.889, "After": 0.899},
+            {"Metric": "Real human precision", "Before": 0.825, "After": 0.850},
+            {"Metric": "Real human recall", "Before": 0.863, "After": 0.863},
+        ]
+    )
+    st.dataframe(results_df, hide_index=True, width="stretch")
+
+    st.write("How to read the explanations")
     st.write(
+        "The explanation panel is heuristic. It translates visible sequence patterns "
+        "into readable signals, such as alternation bias or streak avoidance. It is meant "
+        "to help users understand the behavior in their sequence, not to claim a perfect "
+        "causal explanation of every model probability."
+    )
+
+    st.write("Privacy model")
+    privacy_df = pd.DataFrame(
+        [
+            {
+                "Access": "Public app",
+                "Can do": "Insert labeled rows and read aggregate analytics.",
+            },
+            {
+                "Access": "Private local scripts",
+                "Can do": "Read raw Supabase rows with SUPABASE_SERVICE_ROLE_KEY.",
+            },
+        ]
+    )
+    st.dataframe(privacy_df, hide_index=True, width="stretch")
+
+    st.info(
         "Current production model: synthetic-only Gaussian Naive Bayes with the "
-        "synthetic-human-v2 data generator."
+        "synthetic-human-v2 data generator. Real submitted data is used for evaluation, "
+        "not production retraining yet."
     )
 
 
