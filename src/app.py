@@ -156,6 +156,21 @@ def append_csv_result(data):
         df.to_csv(ANALYTICS_PATH, index=False)
 
 
+def save_collected_sequence(sequence, actual_label, user_guess):
+    result = predict_sequence(sequence)
+
+    log_result(
+        sequence=sequence,
+        actual_label=actual_label,
+        p_human=result["p_human"],
+        p_random=result["p_random"],
+        model_prediction=result["prediction"],
+        user_guess=user_guess,
+    )
+
+    return result
+
+
 def load_analytics():
     if supabase_enabled():
         return load_supabase_analytics()
@@ -333,28 +348,112 @@ with tab_collect:
     st.subheader("Collect labeled examples")
     st.write("Use this when the source is known. The model predicts from the sequence only; the source label is saved for evaluation.")
 
-    action_col_1, action_col_2 = st.columns([1, 1])
+    human_col, random_col = st.columns([2, 1])
 
-    with action_col_1:
-        if st.button("Generate known-random batch", width="stretch"):
-            for i in range(BATCH_SIZE):
-                st.session_state[f"seq_{i}"] = generate_random_sequence()
-                st.session_state[f"actual_{i}"] = "Random"
-                st.session_state[f"guess_{i}"] = "Random"
+    with human_col:
+        st.write("Human sequences")
+        human_input = st.text_area(
+            "Paste one human-made sequence per line",
+            height=180,
+            placeholder="01001101011000100110\n10100100101101001010",
+            help="Blank lines are ignored. Spaces inside a sequence are okay.",
+        )
 
-    with action_col_2:
-        if st.button("Clear batch", width="stretch"):
-            for i in range(BATCH_SIZE):
-                st.session_state[f"seq_{i}"] = ""
-                st.session_state[f"actual_{i}"] = "Human"
-                st.session_state[f"guess_{i}"] = "Human"
+        if st.button("Save Human Sequences", type="primary", width="stretch"):
+            saved_rows = 0
+            invalid_rows = 0
 
-    st.divider()
+            for line_number, raw_sequence in enumerate(human_input.splitlines(), start=1):
+                if not raw_sequence.strip():
+                    continue
 
-    for i in range(BATCH_SIZE):
-        with st.expander(f"Example {i + 1}", expanded=i == 0):
+                sequence, error = validate_sequence(raw_sequence)
+
+                if error:
+                    invalid_rows += 1
+                    st.warning(f"Line {line_number}: {error}")
+                    continue
+
+                try:
+                    result = save_collected_sequence(
+                        sequence=sequence,
+                        actual_label="Human",
+                        user_guess="Human",
+                    )
+                except requests.RequestException as exc:
+                    st.error(f"Could not save line {line_number} to Supabase: {exc}")
+                    continue
+
+                saved_rows += 1
+                st.write(
+                    f"Line {line_number}: model said {result['prediction']} "
+                    f"with {result['confidence']:.2f} confidence."
+                )
+
+            if saved_rows:
+                destination = "Supabase" if supabase_enabled() else "analytics.csv"
+                st.success(f"Saved {saved_rows} human row(s) to {destination}.")
+            elif invalid_rows:
+                st.error("No human rows were saved.")
+            else:
+                st.info("Paste at least one sequence first.")
+
+    with random_col:
+        st.write("Random sequences")
+        random_count = st.number_input(
+            "Rows to generate",
+            min_value=1,
+            max_value=50,
+            value=5,
+            step=1,
+        )
+
+        if st.button("Generate And Save Random Rows", type="primary", width="stretch"):
+            saved_rows = 0
+
+            for _ in range(random_count):
+                sequence = generate_random_sequence()
+
+                try:
+                    save_collected_sequence(
+                        sequence=sequence,
+                        actual_label="Random",
+                        user_guess="Random",
+                    )
+                except requests.RequestException as exc:
+                    st.error(f"Could not save generated row to Supabase: {exc}")
+                    continue
+
+                saved_rows += 1
+
+            if saved_rows:
+                destination = "Supabase" if supabase_enabled() else "analytics.csv"
+                st.success(f"Saved {saved_rows} random row(s) to {destination}.")
+            else:
+                st.error("No random rows were saved.")
+
+    with st.expander("Advanced: review or edit five examples before saving"):
+        action_col_1, action_col_2 = st.columns([1, 1])
+
+        with action_col_1:
+            if st.button("Generate known-random batch", width="stretch"):
+                for i in range(BATCH_SIZE):
+                    st.session_state[f"seq_{i}"] = generate_random_sequence()
+                    st.session_state[f"actual_{i}"] = "Random"
+                    st.session_state[f"guess_{i}"] = "Random"
+
+        with action_col_2:
+            if st.button("Clear batch", width="stretch"):
+                for i in range(BATCH_SIZE):
+                    st.session_state[f"seq_{i}"] = ""
+                    st.session_state[f"actual_{i}"] = "Human"
+                    st.session_state[f"guess_{i}"] = "Human"
+
+        st.divider()
+
+        for i in range(BATCH_SIZE):
             st.text_input(
-                "Sequence",
+                f"Example {i + 1}",
                 key=f"seq_{i}",
                 placeholder="Type human data or use the random batch generator",
                 help="At least 10 bits. Spaces are ignored.",
@@ -379,56 +478,53 @@ with tab_collect:
                     horizontal=True,
                 )
 
-    if st.button("Predict And Save Valid Rows", type="primary", width="stretch"):
-        saved_rows = 0
+        if st.button("Predict And Save Valid Rows", type="primary", width="stretch"):
+            saved_rows = 0
 
-        for i in range(BATCH_SIZE):
-            sequence, error = validate_sequence(st.session_state[f"seq_{i}"])
+            for i in range(BATCH_SIZE):
+                sequence, error = validate_sequence(st.session_state[f"seq_{i}"])
 
-            if error:
-                st.warning(f"Example {i + 1}: {error}")
-                continue
+                if error:
+                    st.warning(f"Example {i + 1}: {error}")
+                    continue
 
-            result = predict_sequence(sequence)
-            actual_label = st.session_state[f"actual_{i}"]
-            user_guess = st.session_state[f"guess_{i}"]
-            model_correct = result["prediction"] == actual_label
-            user_correct = user_guess == actual_label
+                actual_label = st.session_state[f"actual_{i}"]
+                user_guess = st.session_state[f"guess_{i}"]
 
-            st.write(f"Example {i + 1}: `{sequence}`")
-            st.write(f"Actual: {actual_label} | Model: {result['prediction']} | Your guess: {user_guess}")
-            st.write(f"Confidence: {result['confidence']:.2f}")
+                try:
+                    result = save_collected_sequence(
+                        sequence=sequence,
+                        actual_label=actual_label,
+                        user_guess=user_guess,
+                    )
+                except requests.RequestException as exc:
+                    st.error(f"Could not save Example {i + 1} to Supabase: {exc}")
+                    continue
 
-            if user_correct and not model_correct:
-                st.success("You beat the model on this one.")
-                st.session_state.score += 1
-            elif user_correct and model_correct:
-                st.info("You and the model were both correct.")
-            elif not user_correct and model_correct:
-                st.error("The model was correct.")
+                model_correct = result["prediction"] == actual_label
+                user_correct = user_guess == actual_label
+
+                st.write(f"Example {i + 1}: `{sequence}`")
+                st.write(f"Actual: {actual_label} | Model: {result['prediction']} | Your guess: {user_guess}")
+                st.write(f"Confidence: {result['confidence']:.2f}")
+
+                if user_correct and not model_correct:
+                    st.success("You beat the model on this one.")
+                    st.session_state.score += 1
+                elif user_correct and model_correct:
+                    st.info("You and the model were both correct.")
+                elif not user_correct and model_correct:
+                    st.error("The model was correct.")
+                else:
+                    st.warning("Neither prediction matched the label.")
+
+                saved_rows += 1
+
+            if saved_rows:
+                destination = "Supabase" if supabase_enabled() else "analytics.csv"
+                st.success(f"Saved {saved_rows} labeled row(s) to {destination}.")
             else:
-                st.warning("Neither prediction matched the label.")
-
-            try:
-                log_result(
-                    sequence=sequence,
-                    actual_label=actual_label,
-                    p_human=result["p_human"],
-                    p_random=result["p_random"],
-                    model_prediction=result["prediction"],
-                    user_guess=user_guess,
-                )
-            except requests.RequestException as exc:
-                st.error(f"Could not save Example {i + 1} to Supabase: {exc}")
-                continue
-
-            saved_rows += 1
-
-        if saved_rows:
-            destination = "Supabase" if supabase_enabled() else "analytics.csv"
-            st.success(f"Saved {saved_rows} labeled row(s) to {destination}.")
-        else:
-            st.error("No valid rows were saved.")
+                st.error("No valid rows were saved.")
 
 with tab_analytics:
     st.subheader("Collected data")
@@ -461,6 +557,18 @@ with tab_analytics:
         metric_col_1.metric("Labeled samples", total)
         metric_col_2.metric("Model accuracy", f"{model_accuracy:.2f}")
         metric_col_3.metric("User accuracy", f"{user_accuracy:.2f}")
+
+        label_counts = analytics_df["actual_label"].value_counts()
+        human_count = int(label_counts.get("Human", 0))
+        random_count = int(label_counts.get("Random", 0))
+        needed_human = max(0, random_count - human_count)
+
+        st.write("Label distribution")
+        label_col_1, label_col_2, label_col_3 = st.columns(3)
+        label_col_1.metric("Human rows", human_count)
+        label_col_2.metric("Random rows", random_count)
+        label_col_3.metric("Human rows to balance", needed_human)
+        st.bar_chart(label_counts.rename_axis("label").reset_index(name="rows"), x="label", y="rows")
 
         st.write("Human probability over collected samples")
         st.line_chart(analytics_df["p_human"])
