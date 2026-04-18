@@ -12,16 +12,16 @@ This started as a small classifier for binary strings. It grew into a portfolio-
 
 Figure 1: Project growth over time
 
-```mermaid
-flowchart LR
-    A[Simple classifier] --> B[Feature engineering]
-    B --> C[Synthetic human generator]
-    C --> D[Deployed app]
-    D --> E[Own Supabase dataset]
-    E --> F[Real-data evaluation]
-    F --> G[Improved synthetic generator]
-    G --> H[Challenge mode and explanations]
-    H --> I[Aggregate analytics and report]
+```text
+Simple classifier
+  -> Feature engineering
+  -> Synthetic human generator
+  -> Deployed app
+  -> Own Supabase dataset
+  -> Real-data evaluation
+  -> Improved synthetic generator
+  -> Challenge mode and explanations
+  -> Aggregate analytics and report
 ```
 
 ## Why It Is Interesting
@@ -43,19 +43,17 @@ The app does not just say "Human" or "Random." It also tells the user why:
 
 Figure 2: App and evaluation loop
 
-```mermaid
-flowchart TD
-    U[Real users enter sequences] --> V[Validation]
-    V --> F[13-feature extraction]
-    F --> M[Gaussian Naive Bayes model]
-    F --> X[Explanation signals]
-    M --> P[Prediction and confidence]
-    X --> P
-    P --> S[Logged to Supabase]
-    S --> D[Self-collected labeled dataset]
-    D --> R[Private real-data evaluation]
-    R --> G[Synthetic generator tuning]
-    G --> M
+```text
+Real users enter sequences
+  -> validation
+  -> 13-feature extraction
+  -> Gaussian Naive Bayes prediction
+  -> explanation signals
+  -> challenge feedback
+  -> Supabase logging
+  -> self-collected labeled dataset
+  -> private real-data evaluation
+  -> synthetic generator tuning
 ```
 
 ## Key Features
@@ -129,13 +127,12 @@ The model kept human recall stable while reducing false human predictions on ran
 
 Figure 3: Synthetic assumptions checked against self-collected data
 
-```mermaid
-flowchart LR
-    A[Synthetic training data] --> B[Initial model]
-    C[Real users in deployed app] --> D[Supabase labeled dataset]
-    D --> E[Real-data evaluation]
-    E --> F[Generator upgrade]
-    F --> G[Retrained production artifacts]
+```text
+Synthetic training data -> initial model
+Real deployed users     -> Supabase labeled dataset
+Supabase dataset        -> real-data evaluation
+Real-data evaluation    -> generator upgrade
+Generator upgrade       -> retrained production artifacts
 ```
 
 Current synthetic confusion matrix:
@@ -147,13 +144,12 @@ Current synthetic confusion matrix:
 
 Figure 4: Evaluation surfaces
 
-```mermaid
-flowchart LR
-    A[Synthetic holdout report] --> C[Model sanity check]
-    B[Supabase real-data report] --> C
-    D[Calibration buckets] --> C
-    E[Real-vs-synthetic feature comparison] --> C
-```
+| Evaluation surface | Purpose |
+|---|---|
+| Synthetic holdout report | Checks whether the model learned the controlled training task. |
+| Supabase real-data report | Checks whether the model transfers to real user submissions. |
+| Calibration buckets | Checks whether probabilities are trustworthy. |
+| Real-vs-synthetic feature comparison | Checks whether synthetic assumptions match collected behavior. |
 
 ## Project Structure
 

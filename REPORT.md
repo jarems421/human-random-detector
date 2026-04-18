@@ -10,18 +10,15 @@ The answer became the shape of the final system. The app now lets users try to f
 
 Figure 1: How the project evolved
 
-```mermaid
-timeline
-    title Human Randomness Experiment Development
-    Simple ML demo : Binary sequence classifier
-    Feature engineering : Entropy, runs, alternation, balance
-    Deployed app : Users submit real sequences
-    Supabase logging : Real user sequences and labels
-    Real-data evaluation : Synthetic model checked against app data
-    Generator upgrade : Human behaviors reweighted from observed patterns
-    Experiment UI : Challenge mode and explanations
-    Portfolio polish : Aggregate analytics, calibration, report, tests
-```
+| Stage | What changed |
+|---:|---|
+| 1 | Simple binary sequence classifier |
+| 2 | Feature engineering for entropy, runs, alternation, and balance |
+| 3 | Deployed app where users submit real sequences |
+| 4 | Supabase logging for real user sequences and labels |
+| 5 | Real-data evaluation against the self-collected dataset |
+| 6 | Synthetic generator reweighted from observed behavior |
+| 7 | Challenge mode, explanations, aggregate analytics, calibration, report, and tests |
 
 ## 2. Problem And Hypothesis
 
@@ -43,21 +40,18 @@ That gives the project a behavioral science layer. The model is not just detecti
 
 Figure 2: Prediction and learning loop
 
-```mermaid
-flowchart TD
-    A[Real app submission] --> B[Clean and validate input]
-    B --> C[Extract 13 statistical features]
-    C --> D[Scale features]
-    D --> E[Gaussian Naive Bayes model]
-    C --> F[Heuristic explanation layer]
-    E --> G[Human or Random prediction]
-    F --> H[Plain-language signals]
-    G --> I[Challenge feedback]
-    H --> I
-    I --> J[Supabase logging]
-    J --> K[Self-collected labeled dataset]
-    K --> L[Private real-data evaluation]
-    L --> M[Generator and report updates]
+```text
+Real app submission
+  -> clean and validate input
+  -> extract 13 statistical features
+  -> scale features
+  -> Gaussian Naive Bayes prediction
+  -> plain-language explanation signals
+  -> challenge feedback
+  -> Supabase logging
+  -> self-collected labeled dataset
+  -> private real-data evaluation
+  -> generator and report updates
 ```
 
 The deployed app has five main parts:
@@ -100,27 +94,26 @@ The upgraded generator keeps the random class unchanged and reweights the human 
 
 Figure 3: Upgraded synthetic human mix
 
-```mermaid
-pie title Synthetic human behavior weights
-    "Near-alternating" : 35
-    "Balanced/streak-avoidant" : 25
-    "Chunk-pattern" : 20
-    "Soft-biased" : 10
-    "Noisy/random-like" : 10
-```
+| Human behavior | Weight |
+|---|---:|
+| Near-alternating | 35% |
+| Balanced/streak-avoidant | 25% |
+| Chunk-pattern | 20% |
+| Soft-biased | 10% |
+| Noisy/random-like | 10% |
 
 This generator better represents broad human randomness mistakes without overfitting to one person's style.
 
 Figure 4: Own-dataset feedback loop
 
-```mermaid
-flowchart TD
-    A[Deployed Streamlit challenge] --> B[Users submit human/random sequences]
-    B --> C[Supabase stores labels, predictions, probabilities, metadata]
-    C --> D[Private evaluation scripts]
-    D --> E[Real-data metrics and pattern analysis]
-    E --> F[Generator weights and documentation updates]
-    F --> G[Retrained model artifacts]
+```text
+Deployed Streamlit challenge
+  -> users submit human/random sequences
+  -> Supabase stores labels, predictions, probabilities, and metadata
+  -> private evaluation scripts
+  -> real-data metrics and pattern analysis
+  -> generator weights and documentation updates
+  -> retrained model artifacts
 ```
 
 ## 6. Evaluation Results
@@ -170,13 +163,10 @@ The app originally exposed recent raw rows for convenience. The upgraded version
 
 Figure 5: Public vs private data access
 
-```mermaid
-flowchart LR
-    A[Public app with anon key] --> B[Insert labeled rows]
-    A --> C[Read aggregate summary view]
-    D[Local evaluation with service role key] --> E[Read raw analytics rows]
-    E --> F[Real-data metrics and reports]
-```
+| Access path | Permissions | Purpose |
+|---|---|---|
+| Public app with anon key | Insert labeled rows and read aggregate summary view | Keeps the demo interactive without exposing raw submissions. |
+| Local evaluation with service role key | Read raw analytics rows | Produces private real-data metrics and reports. |
 
 This keeps the deployed app useful while reducing unnecessary exposure of user-submitted data.
 
@@ -202,7 +192,7 @@ The test suite covers:
 Current verification:
 
 ```text
-43 tests passed
+44 tests passed
 ```
 
 ## 11. Limitations
