@@ -32,10 +32,12 @@ def prepare_valid_rows(df):
     validate_required_columns(df)
 
     rows = []
+    seen_sequences = set()
     skipped = {
         "short_sequence": 0,
         "non_binary_sequence": 0,
         "invalid_label": 0,
+        "duplicate_sequence": 0,
     }
 
     for _, row in df.iterrows():
@@ -60,6 +62,11 @@ def prepare_valid_rows(df):
             skipped["non_binary_sequence"] += 1
             continue
 
+        if sequence in seen_sequences:
+            skipped["duplicate_sequence"] += 1
+            continue
+
+        seen_sequences.add(sequence)
         rows.append(
             {
                 "sequence": sequence,
@@ -242,7 +249,7 @@ def print_analysis(analysis):
 
 def get_supabase_config():
     url = os.getenv("SUPABASE_URL")
-    key = os.getenv("SUPABASE_KEY")
+    key = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
 
     if not url or not key:
         return None
@@ -296,6 +303,12 @@ def main():
             df = load_supabase_dataframe(supabase_config)
         elif ANALYTICS_PATH.exists():
             df = load_csv_dataframe()
+        elif os.getenv("SUPABASE_URL") or os.getenv("SUPABASE_KEY"):
+            print(
+                "Raw Supabase pattern analysis requires SUPABASE_SERVICE_ROLE_KEY. "
+                "Set it locally or export analytics.csv."
+            )
+            return 1
         else:
             print("No analytics.csv found. Collect labeled samples in the app first.")
             return 0

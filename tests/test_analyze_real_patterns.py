@@ -113,7 +113,7 @@ def test_batch_previous_end_to_next_start_switching():
                 "batch_position": 2,
             },
             {
-                "sequence": "0101010101",
+                "sequence": "0011010101",
                 "actual_label": "Human",
                 "batch_id": "batch-1",
                 "batch_position": 3,

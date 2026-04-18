@@ -1,5 +1,6 @@
 from datetime import datetime
 from pathlib import Path
+import json
 import os
 import secrets
 import uuid
@@ -9,6 +10,14 @@ import pandas as pd
 import requests
 import streamlit as st
 
+from analytics_summary import (
+    build_public_summary,
+    empty_public_summary,
+    label_count_frame,
+    probability_by_label_frame,
+    summary_from_supabase_row,
+)
+from explanations import explain_sequence, explanation_tags, feature_rows
 from features import extract_features
 
 
@@ -17,18 +26,21 @@ MODEL_PATH = PROJECT_ROOT / "model.pkl"
 SCALER_PATH = PROJECT_ROOT / "scaler.pkl"
 ANALYTICS_PATH = PROJECT_ROOT / "analytics.csv"
 BATCH_SIZE = 5
+CHALLENGE_ROUNDS = 5
 SEQUENCE_LENGTH = 50
+MODEL_VERSION = "synthetic-human-v2"
+SUPABASE_TABLE = "analytics"
+PUBLIC_SUMMARY_VIEW = "analytics_public_summary"
 REQUIRED_ANALYTICS_COLUMNS = [
     "actual_label",
     "model_prediction",
     "user_guess",
     "p_human",
 ]
-SUPABASE_TABLE = "analytics"
 
 
 st.set_page_config(
-    page_title="Human vs Random Detector",
+    page_title="Human Randomness Experiment",
     page_icon="01",
     layout="wide",
 )
@@ -104,6 +116,8 @@ def predict_sequence(sequence):
         "p_random": float(p_random),
         "p_human": float(p_human),
         "confidence": float(max(p_random, p_human)),
+        "explanations": explain_sequence(sequence),
+        "explanation_tags": explanation_tags(sequence),
     }
 
 
@@ -117,6 +131,8 @@ def log_result(
     session_id,
     batch_id,
     batch_position,
+    source_mode,
+    tags,
 ):
     data = {
         "timestamp": datetime.now().isoformat(timespec="seconds"),
@@ -129,6 +145,10 @@ def log_result(
         "session_id": session_id,
         "batch_id": batch_id,
         "batch_position": batch_position,
+        "model_version": MODEL_VERSION,
+        "sequence_length": len(sequence),
+        "source_mode": source_mode,
+        "explanation_tags": tags,
     }
 
     if supabase_enabled():
@@ -141,6 +161,28 @@ def log_result(
 def insert_supabase_result(data):
     config = get_supabase_config()
     endpoint = f"{config['url']}/rest/v1/{SUPABASE_TABLE}"
+    headers = get_supabase_headers(config)
+    headers["Prefer"] = "return=minimal"
+    response = requests.post(endpoint, headers=headers, json=supabase_payload(data), timeout=10)
+
+    if response.status_code < 400:
+        return
+
+    legacy_response = requests.post(
+        endpoint,
+        headers=headers,
+        json=supabase_payload(data, include_metadata=False),
+        timeout=10,
+    )
+
+    if legacy_response.status_code >= 400:
+        raise requests.HTTPError(
+            f"{legacy_response.status_code} {legacy_response.reason}: {legacy_response.text}",
+            response=legacy_response,
+        )
+
+
+def supabase_payload(data, include_metadata=True):
     payload = {
         "sequence": data["sequence"],
         "actual_label": data["actual_label"],
@@ -152,20 +194,24 @@ def insert_supabase_result(data):
         "batch_id": data["batch_id"],
         "batch_position": data["batch_position"],
     }
-    headers = get_supabase_headers(config)
-    headers["Prefer"] = "return=minimal"
 
-    response = requests.post(endpoint, headers=headers, json=payload, timeout=10)
-
-    if response.status_code >= 400:
-        raise requests.HTTPError(
-            f"{response.status_code} {response.reason}: {response.text}",
-            response=response,
+    if include_metadata:
+        payload.update(
+            {
+                "model_version": data["model_version"],
+                "sequence_length": data["sequence_length"],
+                "source_mode": data["source_mode"],
+                "explanation_tags": data["explanation_tags"],
+            }
         )
+
+    return payload
 
 
 def append_csv_result(data):
-    df = pd.DataFrame([data])
+    csv_data = data.copy()
+    csv_data["explanation_tags"] = json.dumps(csv_data["explanation_tags"])
+    df = pd.DataFrame([csv_data])
 
     if ANALYTICS_PATH.exists():
         df.to_csv(ANALYTICS_PATH, mode="a", header=False, index=False)
@@ -173,7 +219,14 @@ def append_csv_result(data):
         df.to_csv(ANALYTICS_PATH, index=False)
 
 
-def save_collected_sequence(sequence, actual_label, user_guess, batch_id, batch_position):
+def save_collected_sequence(
+    sequence,
+    actual_label,
+    user_guess,
+    batch_id,
+    batch_position,
+    source_mode="collect",
+):
     result = predict_sequence(sequence)
 
     log_result(
@@ -186,52 +239,41 @@ def save_collected_sequence(sequence, actual_label, user_guess, batch_id, batch_
         session_id=st.session_state.session_id,
         batch_id=batch_id,
         batch_position=batch_position,
+        source_mode=source_mode,
+        tags=result["explanation_tags"],
     )
 
     return result
 
 
-def load_analytics():
+def load_public_analytics_summary():
     if supabase_enabled():
-        return load_supabase_analytics()
+        return load_supabase_public_summary(), None
 
-    return load_csv_analytics()
+    df, missing_columns = load_csv_analytics()
+
+    if df is None or missing_columns:
+        return empty_public_summary(), missing_columns
+
+    return build_public_summary(df), None
 
 
-def load_supabase_analytics():
+def load_supabase_public_summary():
     config = get_supabase_config()
-    endpoint = f"{config['url']}/rest/v1/{SUPABASE_TABLE}"
-    params = {
-        "select": "created_at,sequence,actual_label,p_human,p_random,model_prediction,user_guess,session_id,batch_id,batch_position",
-        "order": "created_at.asc",
-    }
+    endpoint = f"{config['url']}/rest/v1/{PUBLIC_SUMMARY_VIEW}"
     response = requests.get(
         endpoint,
         headers=get_supabase_headers(config),
-        params=params,
+        params={"select": "*"},
         timeout=10,
     )
     response.raise_for_status()
+    rows = response.json()
 
-    df = pd.DataFrame(response.json())
+    if not rows:
+        return empty_public_summary()
 
-    if df.empty:
-        return pd.DataFrame(
-            columns=[
-                "timestamp",
-                "sequence",
-                "actual_label",
-                "p_human",
-                "p_random",
-                "model_prediction",
-                "user_guess",
-            ]
-        ), None
-
-    if "created_at" in df.columns:
-        df = df.rename(columns={"created_at": "timestamp"})
-
-    return prepare_analytics_dataframe(df)
+    return summary_from_supabase_row(rows[0])
 
 
 def load_csv_analytics():
@@ -248,6 +290,8 @@ def load_csv_analytics():
             "user_guess": "string",
             "session_id": "string",
             "batch_id": "string",
+            "source_mode": "string",
+            "model_version": "string",
         },
     )
 
@@ -261,7 +305,7 @@ def prepare_analytics_dataframe(df):
         return df, missing
 
     df["p_human"] = pd.to_numeric(df["p_human"], errors="coerce")
-    df["p_random"] = pd.to_numeric(df["p_random"], errors="coerce")
+    df["p_random"] = pd.to_numeric(df.get("p_random"), errors="coerce")
 
     return df, None
 
@@ -273,66 +317,149 @@ def show_probability_summary(result):
     st.progress(result["p_random"], text=f"Random probability: {result['p_random']:.2f}")
 
 
-def show_sequence_features(sequence):
-    entropy, markov_entropy, kl_divergence, longest_run, alternation_rate = extract_features(sequence)
+def show_explanations(result):
+    st.write("What gave it away")
 
-    feature_df = pd.DataFrame(
-        [
-            {"Feature": "Entropy", "Value": entropy},
-            {"Feature": "Markov entropy", "Value": markov_entropy},
-            {"Feature": "KL divergence", "Value": kl_divergence},
-            {"Feature": "Longest run", "Value": longest_run},
-            {"Feature": "Alternation rate", "Value": alternation_rate},
-        ]
+    for signal in result["explanations"]:
+        with st.container(border=True):
+            st.write(f"**{signal['title']}**")
+            st.caption(signal["message"])
+
+
+def show_sequence_features(sequence):
+    st.dataframe(pd.DataFrame(feature_rows(sequence)), hide_index=True, width="stretch")
+
+
+def show_prediction_result(sequence, result):
+    summary_col, explanation_col = st.columns([1, 2])
+
+    with summary_col:
+        show_probability_summary(result)
+
+    with explanation_col:
+        show_explanations(result)
+
+    with st.expander("Numeric feature details"):
+        show_sequence_features(sequence)
+
+
+def ensure_session_defaults():
+    st.session_state.setdefault("score", 0)
+    st.session_state.setdefault("session_id", str(uuid.uuid4()))
+    st.session_state.setdefault("challenge_batch_id", str(uuid.uuid4()))
+    st.session_state.setdefault("challenge_results", {})
+
+    for i in range(BATCH_SIZE):
+        st.session_state.setdefault(f"seq_{i}", "")
+        st.session_state.setdefault(f"actual_{i}", "Human")
+        st.session_state.setdefault(f"guess_{i}", "No guess")
+
+    for i in range(CHALLENGE_ROUNDS):
+        st.session_state.setdefault(f"challenge_seq_{i}", "")
+
+
+def reset_challenge():
+    st.session_state.challenge_batch_id = str(uuid.uuid4())
+    st.session_state.challenge_results = {}
+
+    for i in range(CHALLENGE_ROUNDS):
+        st.session_state[f"challenge_seq_{i}"] = ""
+
+
+def challenge_score():
+    return sum(
+        1
+        for result in st.session_state.challenge_results.values()
+        if result["prediction"] == "Random"
     )
 
-    st.dataframe(feature_df, hide_index=True, width="stretch")
+
+def challenge_summary_text():
+    results = list(st.session_state.challenge_results.values())
+
+    if not results:
+        return "Start with round 1 and try to make a human-made sequence look random."
+
+    all_tags = [
+        signal["tag"]
+        for result in results
+        for signal in result["explanations"]
+        if signal["tag"] != "random_like"
+    ]
+
+    if all_tags:
+        top_tag = pd.Series(all_tags).value_counts().index[0].replace("_", " ")
+        return f"Your main giveaway was {top_tag}."
+
+    return "Your attempts were fairly random-looking, so longer samples may be needed."
 
 
-def prepare_recent_rows_for_display(df):
-    recent_rows = df.tail(20).copy()
+def show_challenge_tab():
+    st.subheader("Beat the model")
+    st.write("Enter five human-made bit sequences. You score when the model calls your sequence Random.")
 
-    for column in ["timestamp", "sequence", "actual_label", "model_prediction", "user_guess"]:
-        if column in recent_rows.columns:
-            recent_rows[column] = recent_rows[column].astype("string")
+    action_col_1, action_col_2 = st.columns([1, 1])
 
-    return recent_rows
+    with action_col_1:
+        st.metric("Challenge score", f"{challenge_score()} / {CHALLENGE_ROUNDS}")
+
+    with action_col_2:
+        if st.button("Start a new challenge", width="stretch"):
+            reset_challenge()
+            st.rerun()
+
+    for i in range(CHALLENGE_ROUNDS):
+        with st.container(border=True):
+            st.write(f"Round {i + 1}")
+            sequence_input = st.text_input(
+                "Your human-made sequence",
+                key=f"challenge_seq_{i}",
+                placeholder="Example: 01001101011000100110",
+                help="Enter at least 10 bits. Spaces are ignored.",
+                label_visibility="collapsed",
+            )
+            cleaned_sequence, error = validate_sequence(sequence_input)
+            st.caption(f"Length after cleaning: {len(cleaned_sequence)} bits")
+
+            if st.button("Score this round", key=f"score_challenge_{i}", width="stretch"):
+                if error:
+                    st.error(error)
+                else:
+                    try:
+                        result = save_collected_sequence(
+                            sequence=cleaned_sequence,
+                            actual_label="Human",
+                            user_guess=None,
+                            batch_id=st.session_state.challenge_batch_id,
+                            batch_position=i + 1,
+                            source_mode="challenge",
+                        )
+                    except requests.RequestException as exc:
+                        st.error(f"Could not save this round: {exc}")
+                    else:
+                        result["sequence"] = cleaned_sequence
+                        st.session_state.challenge_results[i] = result
+                        st.session_state.score = challenge_score()
+
+            if i in st.session_state.challenge_results:
+                result = st.session_state.challenge_results[i]
+                fooled = result["prediction"] == "Random"
+
+                if fooled:
+                    st.success("Point scored. The model called this Random.")
+                else:
+                    st.info("The model spotted this as Human.")
+
+                show_prediction_result(result["sequence"], result)
+
+    if len(st.session_state.challenge_results) == CHALLENGE_ROUNDS:
+        st.success(f"Final score: {challenge_score()} / {CHALLENGE_ROUNDS}")
+        st.write(challenge_summary_text())
 
 
-model, scaler = load_model_assets()
-
-if "score" not in st.session_state:
-    st.session_state.score = 0
-
-if "session_id" not in st.session_state:
-    st.session_state.session_id = str(uuid.uuid4())
-
-for i in range(BATCH_SIZE):
-    st.session_state.setdefault(f"seq_{i}", "")
-    st.session_state.setdefault(f"actual_{i}", "Human")
-    st.session_state.setdefault(f"guess_{i}", "No guess")
-
-st.title("Human vs Random Sequence Detector")
-st.write("Analyze a bit sequence, collect labeled examples, and track how the model performs on real inputs.")
-
-with st.sidebar:
-    st.header("How To Use")
-    st.write("Type a sequence of 0s and 1s. Spaces and line breaks are ignored.")
-    st.write("Use Collect Data when you know the true source of the sequence.")
-    st.metric("Beat-the-model score", st.session_state.score)
-
-    if supabase_enabled():
-        st.success("Saving data to Supabase.")
-    else:
-        st.info("Saving data to local analytics.csv.")
-
-tab_detect, tab_collect, tab_analytics = st.tabs(
-    ["Try Detector", "Collect Data", "Analytics"]
-)
-
-with tab_detect:
-    st.subheader("Try one sequence")
-    st.write("Paste or type a sequence to get a quick prediction without saving it to the dataset.")
+def show_analyze_tab():
+    st.subheader("Analyze one sequence")
+    st.write("Paste or type a sequence to see the prediction without saving it.")
 
     col_generate, col_clear = st.columns([1, 1])
 
@@ -359,21 +486,13 @@ with tab_detect:
         if error:
             st.error(error)
         else:
-            result = predict_sequence(cleaned_sequence)
-            summary_col, feature_col = st.columns([1, 2])
+            show_prediction_result(cleaned_sequence, predict_sequence(cleaned_sequence))
 
-            with summary_col:
-                show_probability_summary(result)
 
-            with feature_col:
-                st.write("Feature breakdown")
-                show_sequence_features(cleaned_sequence)
-
-with tab_collect:
+def show_collect_tab():
     st.subheader("Collect labeled examples")
-    st.write("Use this when the source is known. The model predicts from the sequence only; the source label is saved for evaluation.")
+    st.write("Use this when the source is known. The source label is saved for evaluation.")
 
-    st.write("Step 1: choose what kind of data you are adding.")
     collection_mode = st.radio(
         "Known source",
         ["Human sequences", "Random sequences"],
@@ -381,103 +500,112 @@ with tab_collect:
         help="Choose Human when the sequences were typed by a person. Choose Random for generated rows.",
     )
 
-    st.write("Step 2: enter or generate the data.")
-
     if collection_mode == "Human sequences":
-        human_input = st.text_area(
-            "Paste one human-made sequence per line",
-            height=220,
-            placeholder="01001101011000100110\n10100100101101001010",
-            help="Blank lines are ignored. Spaces inside a sequence are okay.",
-        )
-        st.caption("Tip: type several attempts in a notes app or text editor, then paste them here together.")
-        st.caption("These rows do not count toward User accuracy because no separate guess is being collected.")
-
-        if st.button("Save Human Sequences", type="primary", width="stretch"):
-            saved_rows = 0
-            invalid_rows = 0
-            batch_id = str(uuid.uuid4())
-            batch_position = 0
-
-            for line_number, raw_sequence in enumerate(human_input.splitlines(), start=1):
-                if not raw_sequence.strip():
-                    continue
-
-                sequence, error = validate_sequence(raw_sequence)
-
-                if error:
-                    invalid_rows += 1
-                    st.warning(f"Line {line_number}: {error}")
-                    continue
-
-                batch_position += 1
-
-                try:
-                    result = save_collected_sequence(
-                        sequence=sequence,
-                        actual_label="Human",
-                        user_guess=None,
-                        batch_id=batch_id,
-                        batch_position=batch_position,
-                    )
-                except requests.RequestException as exc:
-                    st.error(f"Could not save line {line_number} to Supabase: {exc}")
-                    continue
-
-                saved_rows += 1
-                st.write(
-                    f"Line {line_number}: model said {result['prediction']} "
-                    f"with {result['confidence']:.2f} confidence."
-                )
-
-            if saved_rows:
-                destination = "Supabase" if supabase_enabled() else "analytics.csv"
-                st.success(f"Saved {saved_rows} human row(s) to {destination}.")
-            elif invalid_rows:
-                st.error("No human rows were saved.")
-            else:
-                st.info("Paste at least one sequence first.")
-
+        show_human_collection()
     else:
-        random_count = st.number_input(
-            "Rows to generate",
-            min_value=1,
-            max_value=50,
-            value=5,
-            step=1,
-            help="Generated rows are automatically labeled Random.",
-        )
-        st.caption("Generated rows do not count toward User accuracy because no separate guess is being collected.")
+        show_random_collection()
 
-        if st.button("Generate And Save Random Rows", type="primary", width="stretch"):
-            saved_rows = 0
-            batch_id = str(uuid.uuid4())
+    show_advanced_collection()
 
-            for batch_position in range(1, random_count + 1):
-                sequence = generate_random_sequence()
 
-                try:
-                    save_collected_sequence(
-                        sequence=sequence,
-                        actual_label="Random",
-                        user_guess=None,
-                        batch_id=batch_id,
-                        batch_position=batch_position,
-                    )
-                except requests.RequestException as exc:
-                    st.error(f"Could not save generated row to Supabase: {exc}")
-                    continue
+def show_human_collection():
+    human_input = st.text_area(
+        "Paste one human-made sequence per line",
+        height=220,
+        placeholder="01001101011000100110\n10100100101101001010",
+        help="Blank lines are ignored. Spaces inside a sequence are okay.",
+    )
+    st.caption("These rows help evaluate the model against real human behavior.")
 
-                saved_rows += 1
+    if st.button("Save Human Sequences", type="primary", width="stretch"):
+        saved_rows = 0
+        invalid_rows = 0
+        batch_id = str(uuid.uuid4())
+        batch_position = 0
 
-            if saved_rows:
-                destination = "Supabase" if supabase_enabled() else "analytics.csv"
-                st.success(f"Saved {saved_rows} random row(s) to {destination}.")
-            else:
-                st.error("No random rows were saved.")
+        for line_number, raw_sequence in enumerate(human_input.splitlines(), start=1):
+            if not raw_sequence.strip():
+                continue
 
+            sequence, error = validate_sequence(raw_sequence)
+
+            if error:
+                invalid_rows += 1
+                st.warning(f"Line {line_number}: {error}")
+                continue
+
+            batch_position += 1
+
+            try:
+                result = save_collected_sequence(
+                    sequence=sequence,
+                    actual_label="Human",
+                    user_guess=None,
+                    batch_id=batch_id,
+                    batch_position=batch_position,
+                    source_mode="collection",
+                )
+            except requests.RequestException as exc:
+                st.error(f"Could not save line {line_number}: {exc}")
+                continue
+
+            saved_rows += 1
+            st.write(
+                f"Line {line_number}: model said {result['prediction']} "
+                f"with {result['confidence']:.2f} confidence."
+            )
+
+        show_save_outcome(saved_rows, invalid_rows, "human")
+
+
+def show_random_collection():
+    random_count = st.number_input(
+        "Rows to generate",
+        min_value=1,
+        max_value=50,
+        value=5,
+        step=1,
+        help="Generated rows are automatically labeled Random.",
+    )
+
+    if st.button("Generate And Save Random Rows", type="primary", width="stretch"):
+        saved_rows = 0
+        batch_id = str(uuid.uuid4())
+
+        for batch_position in range(1, random_count + 1):
+            sequence = generate_random_sequence()
+
+            try:
+                save_collected_sequence(
+                    sequence=sequence,
+                    actual_label="Random",
+                    user_guess=None,
+                    batch_id=batch_id,
+                    batch_position=batch_position,
+                    source_mode="collection",
+                )
+            except requests.RequestException as exc:
+                st.error(f"Could not save generated row: {exc}")
+                continue
+
+            saved_rows += 1
+
+        show_save_outcome(saved_rows, 0, "random")
+
+
+def show_save_outcome(saved_rows, invalid_rows, label):
+    if saved_rows:
+        destination = "Supabase" if supabase_enabled() else "analytics.csv"
+        st.success(f"Saved {saved_rows} {label} row(s) to {destination}.")
+    elif invalid_rows:
+        st.error(f"No {label} rows were saved.")
+    else:
+        st.info("Enter at least one sequence first.")
+
+
+def show_advanced_collection():
     with st.expander("Advanced: collect guesses for five examples"):
-        st.write("Use this only when you want to record a separate user guess before saving.")
+        st.write("Use this when you want to record a separate user guess before saving.")
         action_col_1, action_col_2 = st.columns([1, 1])
 
         with action_col_1:
@@ -512,7 +640,6 @@ with tab_collect:
                     ["Human", "Random"],
                     key=f"actual_{i}",
                     horizontal=True,
-                    help="This is saved for evaluation only. The model does not use it to make its prediction.",
                 )
 
             with guess_col:
@@ -524,122 +651,168 @@ with tab_collect:
                 )
 
         if st.button("Predict And Save Valid Rows", type="primary", width="stretch"):
-            saved_rows = 0
-            batch_id = str(uuid.uuid4())
+            save_advanced_rows()
 
-            for i in range(BATCH_SIZE):
-                sequence, error = validate_sequence(st.session_state[f"seq_{i}"])
 
-                if error:
-                    st.warning(f"Example {i + 1}: {error}")
-                    continue
+def save_advanced_rows():
+    saved_rows = 0
+    batch_id = str(uuid.uuid4())
 
-                actual_label = st.session_state[f"actual_{i}"]
-                raw_user_guess = st.session_state[f"guess_{i}"]
-                user_guess = None if raw_user_guess == "No guess" else raw_user_guess
+    for i in range(BATCH_SIZE):
+        sequence, error = validate_sequence(st.session_state[f"seq_{i}"])
 
-                try:
-                    result = save_collected_sequence(
-                        sequence=sequence,
-                        actual_label=actual_label,
-                        user_guess=user_guess,
-                        batch_id=batch_id,
-                        batch_position=i + 1,
-                    )
-                except requests.RequestException as exc:
-                    st.error(f"Could not save Example {i + 1} to Supabase: {exc}")
-                    continue
+        if error:
+            st.warning(f"Example {i + 1}: {error}")
+            continue
 
-                model_correct = result["prediction"] == actual_label
-                user_correct = user_guess == actual_label if user_guess else None
+        actual_label = st.session_state[f"actual_{i}"]
+        raw_user_guess = st.session_state[f"guess_{i}"]
+        user_guess = None if raw_user_guess == "No guess" else raw_user_guess
 
-                st.write(f"Example {i + 1}: `{sequence}`")
-                st.write(f"Actual: {actual_label} | Model: {result['prediction']} | Your guess: {user_guess or 'No guess'}")
-                st.write(f"Confidence: {result['confidence']:.2f}")
+        try:
+            result = save_collected_sequence(
+                sequence=sequence,
+                actual_label=actual_label,
+                user_guess=user_guess,
+                batch_id=batch_id,
+                batch_position=i + 1,
+                source_mode="advanced_collection",
+            )
+        except requests.RequestException as exc:
+            st.error(f"Could not save Example {i + 1}: {exc}")
+            continue
 
-                if user_guess is None:
-                    st.info("Saved without a user guess.")
-                elif user_correct and not model_correct:
-                    st.success("You beat the model on this one.")
-                    st.session_state.score += 1
-                elif user_correct and model_correct:
-                    st.info("You and the model were both correct.")
-                elif not user_correct and model_correct:
-                    st.error("The model was correct.")
-                else:
-                    st.warning("Neither prediction matched the label.")
+        model_correct = result["prediction"] == actual_label
+        user_correct = user_guess == actual_label if user_guess else None
 
-                saved_rows += 1
+        st.write(f"Example {i + 1}: `{sequence}`")
+        st.write(f"Actual: {actual_label} | Model: {result['prediction']} | Your guess: {user_guess or 'No guess'}")
+        st.write(f"Confidence: {result['confidence']:.2f}")
 
-            if saved_rows:
-                destination = "Supabase" if supabase_enabled() else "analytics.csv"
-                st.success(f"Saved {saved_rows} labeled row(s) to {destination}.")
-            else:
-                st.error("No valid rows were saved.")
+        if user_guess is None:
+            st.info("Saved without a user guess.")
+        elif user_correct and not model_correct:
+            st.success("You beat the model on this one.")
+            st.session_state.score += 1
+        elif user_correct and model_correct:
+            st.info("You and the model were both correct.")
+        elif not user_correct and model_correct:
+            st.error("The model was correct.")
+        else:
+            st.warning("Neither prediction matched the label.")
 
-with tab_analytics:
-    st.subheader("Collected data")
+        saved_rows += 1
+
+    if saved_rows:
+        destination = "Supabase" if supabase_enabled() else "analytics.csv"
+        st.success(f"Saved {saved_rows} labeled row(s) to {destination}.")
+    else:
+        st.error("No valid rows were saved.")
+
+
+def show_analytics_tab():
+    st.subheader("Aggregate analytics")
+    st.write("Public analytics use aggregate counts and rates only. Raw submitted sequences are not shown here.")
 
     try:
-        analytics_df, missing_columns = load_analytics()
+        summary, missing_columns = load_public_analytics_summary()
     except requests.RequestException as exc:
-        st.error(f"Could not load Supabase analytics: {exc}")
+        st.error(f"Could not load aggregate analytics: {exc}")
         st.stop()
 
-    if analytics_df is None:
-        st.info("No analytics data yet. Save labeled rows from Collect Data to start tracking performance.")
-    elif missing_columns:
-        st.warning(
-            "analytics.csv uses an older format and cannot be summarized until it is reset or migrated."
-        )
+    if missing_columns:
+        st.warning("analytics.csv uses an older format and cannot be summarized until it is reset or migrated.")
 
         if st.button("Reset analytics.csv", type="primary"):
             ANALYTICS_PATH.unlink()
             st.success("analytics.csv was reset.")
             st.stop()
+
+        return
+
+    metric_col_1, metric_col_2, metric_col_3 = st.columns(3)
+    metric_col_1.metric("Labeled samples", summary["total_rows"])
+    metric_col_2.metric("Model accuracy", format_optional(summary["model_accuracy"]))
+    metric_col_3.metric("User accuracy", format_optional(summary["user_accuracy"], fallback="No guesses"))
+
+    st.write("Class performance")
+    perf_col_1, perf_col_2, perf_col_3, perf_col_4 = st.columns(4)
+    perf_col_1.metric("Human precision", format_optional(summary["human_precision"]))
+    perf_col_2.metric("Human recall", format_optional(summary["human_recall"]))
+    perf_col_3.metric("Random precision", format_optional(summary["random_precision"]))
+    perf_col_4.metric("Random recall", format_optional(summary["random_recall"]))
+
+    st.write("Label distribution")
+    st.bar_chart(label_count_frame(summary), x="label", y="rows")
+
+    probability_df = probability_by_label_frame(summary)
+
+    if not probability_df.empty:
+        st.write("Average human probability by true label")
+        st.bar_chart(probability_df, x="label", y="avg_p_human")
+
+    st.caption(f"Guessed rows: {summary['guessed_rows']}. Raw sequences are reserved for private evaluation scripts.")
+
+
+def format_optional(value, fallback="Not enough data"):
+    if value is None:
+        return fallback
+
+    return f"{value:.2f}"
+
+
+def show_about_tab():
+    st.subheader("About the experiment")
+    st.write(
+        "People often try to make random-looking sequences by balancing 0s and 1s, "
+        "switching too often, and avoiding long streaks. This project tests those habits."
+    )
+    st.write(
+        "The model is trained on synthetic examples that simulate broad human randomness "
+        "biases, then checked against real submitted data from the app."
+    )
+    st.write(
+        "The explanation panel is heuristic: it translates sequence features into readable "
+        "signals so users can see what patterns may have influenced the prediction."
+    )
+    st.write(
+        "Current production model: synthetic-only Gaussian Naive Bayes with the "
+        "synthetic-human-v2 data generator."
+    )
+
+
+model, scaler = load_model_assets()
+ensure_session_defaults()
+
+st.title("Human Randomness Experiment")
+st.write("Try to fool a model trained to spot the patterns people leave when they imitate randomness.")
+
+with st.sidebar:
+    st.header("How To Use")
+    st.write("Start with the challenge, then inspect what gave your sequence away.")
+    st.write("Spaces and line breaks are ignored.")
+    st.metric("Beat-the-model score", st.session_state.score)
+
+    if supabase_enabled():
+        st.success("Saving challenge data to Supabase.")
     else:
-        total = len(analytics_df)
-        model_correct = analytics_df["model_prediction"] == analytics_df["actual_label"]
-        guessed_rows = analytics_df["user_guess"].isin(["Human", "Random"])
-        user_correct = analytics_df.loc[guessed_rows, "user_guess"] == analytics_df.loc[guessed_rows, "actual_label"]
-        model_accuracy = model_correct.mean() if total else 0
-        user_accuracy = user_correct.mean() if guessed_rows.any() else None
+        st.info("Saving challenge data to local analytics.csv.")
 
-        metric_col_1, metric_col_2, metric_col_3 = st.columns(3)
-        metric_col_1.metric("Labeled samples", total)
-        metric_col_2.metric("Model accuracy", f"{model_accuracy:.2f}")
-        metric_col_3.metric(
-            "User accuracy",
-            "No guesses" if user_accuracy is None else f"{user_accuracy:.2f}",
-        )
-        st.caption(f"User accuracy only uses rows where someone made a separate guess. Guessed rows: {int(guessed_rows.sum())}.")
+tab_challenge, tab_analyze, tab_collect, tab_analytics, tab_about = st.tabs(
+    ["Challenge", "Analyze", "Collect Data", "Analytics", "About"]
+)
 
-        label_counts = analytics_df["actual_label"].value_counts()
-        human_count = int(label_counts.get("Human", 0))
-        random_count = int(label_counts.get("Random", 0))
-        needed_human = max(0, random_count - human_count)
+with tab_challenge:
+    show_challenge_tab()
 
-        st.write("Label distribution")
-        label_col_1, label_col_2, label_col_3 = st.columns(3)
-        label_col_1.metric("Human rows", human_count)
-        label_col_2.metric("Random rows", random_count)
-        label_col_3.metric("Human rows to balance", needed_human)
-        st.bar_chart(label_counts.rename_axis("label").reset_index(name="rows"), x="label", y="rows")
+with tab_analyze:
+    show_analyze_tab()
 
-        if "batch_id" in analytics_df.columns:
-            batches_with_metadata = analytics_df["batch_id"].notna().sum()
-            unique_batches = analytics_df["batch_id"].dropna().nunique()
-            st.write("Batch metadata")
-            batch_col_1, batch_col_2 = st.columns(2)
-            batch_col_1.metric("Rows with batch ID", int(batches_with_metadata))
-            batch_col_2.metric("Tracked batches", int(unique_batches))
+with tab_collect:
+    show_collect_tab()
 
-        st.write("Human probability over collected samples")
-        st.line_chart(analytics_df["p_human"])
+with tab_analytics:
+    show_analytics_tab()
 
-        with st.expander("View recent rows"):
-            st.dataframe(
-                prepare_recent_rows_for_display(analytics_df),
-                width="stretch",
-                hide_index=True,
-            )
+with tab_about:
+    show_about_tab()

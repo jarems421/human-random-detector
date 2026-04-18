@@ -1,0 +1,38 @@
+{
+  "valid_rows": 378,
+  "skipped_rows": 0,
+  "skipped": {
+    "short_sequence": 0,
+    "non_binary_sequence": 0,
+    "invalid_label": 0
+  },
+  "label_summary": {
+    "Human": {
+      "count": 131,
+      "mean_starts_with_zero": 0.40458015267175573,
+      "mean_alternation_rate": 0.7218113125666297,
+      "mean_longest_run": 4.67175572519084,
+      "mean_longest_alternating_run": 9.83969465648855,
+      "mean_near_alternation_score": 0.6302518480971854,
+      "mean_pattern_break_count": 8.412213740458014
+    },
+    "Random": {
+      "count": 247,
+      "mean_starts_with_zero": 0.5303643724696356,
+      "mean_alternation_rate": 0.5044203916384368,
+      "mean_longest_run": 5.902834008097166,
+      "mean_longest_alternating_run": 5.963562753036437,
+      "mean_near_alternation_score": 0.5581376518218624,
+      "mean_pattern_break_count": 24.2834008097166
+    }
+  },
+  "batch_summary": {
+    "tracked_batch_count": 4,
+    "rows_with_batch_metadata": 52,
+    "human_batch_count": 4,
+    "mean_human_batch_size": 13.0,
+    "human_batches_with_both_start_bits_pct": 1.0,
+    "human_adjacent_start_bit_switch_pct": 0.5625,
+    "human_previous_end_to_next_start_switch_pct": 0.4583333333333333
+  }
+}

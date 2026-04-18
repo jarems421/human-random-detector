@@ -8,6 +8,7 @@ import pandas as pd
 import requests
 from sklearn.metrics import accuracy_score, classification_report, confusion_matrix, roc_auc_score
 
+from calibration import build_calibration_report
 from features import extract_features
 
 
@@ -30,15 +31,20 @@ def validate_required_columns(df):
         raise ValueError(f"Missing required analytics columns: {', '.join(missing)}")
 
 
-def prepare_labeled_rows(df):
+def clean_sequence(sequence):
+    return "".join(str(sequence).split())
+
+
+def prepare_labeled_dataframe(df):
     validate_required_columns(df)
 
-    sequences = []
-    labels = []
+    rows = []
+    seen_sequences = set()
     skipped = {
         "short_sequence": 0,
         "non_binary_sequence": 0,
         "invalid_label": 0,
+        "duplicate_sequence": 0,
     }
 
     for _, row in df.iterrows():
@@ -53,7 +59,7 @@ def prepare_labeled_rows(df):
             skipped["non_binary_sequence"] += 1
             continue
 
-        sequence = sequence.strip()
+        sequence = clean_sequence(sequence)
 
         if len(sequence) < 10:
             skipped["short_sequence"] += 1
@@ -63,13 +69,40 @@ def prepare_labeled_rows(df):
             skipped["non_binary_sequence"] += 1
             continue
 
-        sequences.append(sequence)
-        labels.append(LABEL_MAP[label.strip()])
+        if sequence in seen_sequences:
+            skipped["duplicate_sequence"] += 1
+            continue
 
-    return sequences, np.array(labels), skipped
+        seen_sequences.add(sequence)
+        label = label.strip()
+        rows.append(
+            {
+                "sequence": sequence,
+                "actual_label": label,
+                "label": LABEL_MAP[label],
+                "session_id": row.get("session_id"),
+                "batch_id": row.get("batch_id"),
+                "batch_position": row.get("batch_position"),
+            }
+        )
+
+    return pd.DataFrame(rows), skipped
 
 
-def build_evaluation(y_true, y_pred, y_prob_human, valid_rows, skipped):
+def prepare_labeled_rows(df):
+    labeled_df, skipped = prepare_labeled_dataframe(df)
+
+    if labeled_df.empty:
+        return [], np.array([], dtype=int), skipped
+
+    return (
+        labeled_df["sequence"].tolist(),
+        labeled_df["label"].to_numpy(dtype=int),
+        skipped,
+    )
+
+
+def build_evaluation(y_true, y_pred, y_prob_human, valid_rows, skipped, group_summary=None):
     has_both_classes = len(set(y_true)) == 2
     roc_auc = roc_auc_score(y_true, y_prob_human) if has_both_classes else None
 
@@ -88,15 +121,19 @@ def build_evaluation(y_true, y_pred, y_prob_human, valid_rows, skipped):
             output_dict=True,
             zero_division=0,
         ),
+        "calibration": build_calibration_report(y_true, y_prob_human),
+        "group_summary": group_summary or {},
     }
 
 
 def evaluate_dataframe(df, model, scaler):
-    sequences, y_true, skipped = prepare_labeled_rows(df)
+    labeled_df, skipped = prepare_labeled_dataframe(df)
 
-    if len(sequences) == 0:
+    if labeled_df.empty:
         raise ValueError("No valid labeled rows found. Collect labeled samples in the app first.")
 
+    sequences = labeled_df["sequence"].tolist()
+    y_true = labeled_df["label"].to_numpy(dtype=int)
     features = np.array([extract_features(sequence) for sequence in sequences])
     scaled_features = scaler.transform(features)
     y_pred = model.predict(scaled_features)
@@ -108,7 +145,17 @@ def evaluate_dataframe(df, model, scaler):
         y_prob_human=y_prob_human,
         valid_rows=len(sequences),
         skipped=skipped,
+        group_summary=summarize_groups(labeled_df),
     )
+
+
+def summarize_groups(df):
+    return {
+        "rows_with_session_id": int(df["session_id"].notna().sum()) if "session_id" in df else 0,
+        "session_count": int(df["session_id"].dropna().nunique()) if "session_id" in df else 0,
+        "rows_with_batch_id": int(df["batch_id"].notna().sum()) if "batch_id" in df else 0,
+        "batch_count": int(df["batch_id"].dropna().nunique()) if "batch_id" in df else 0,
+    }
 
 
 def print_evaluation(evaluation):
@@ -127,11 +174,13 @@ def print_evaluation(evaluation):
     print(np.array(evaluation["confusion_matrix"]))
     print("\nClassification report:")
     print(pd.DataFrame(evaluation["classification_report"]).transpose())
+    print(f"\nBrier score: {evaluation['calibration']['brier_score']:.3f}")
+    print(f"Calibration: {evaluation['calibration']['summary']}")
 
 
 def get_supabase_config():
     url = os.getenv("SUPABASE_URL")
-    key = os.getenv("SUPABASE_KEY")
+    key = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
 
     if not url or not key:
         return None
@@ -171,6 +220,8 @@ def load_csv_dataframe():
         dtype={
             "sequence": "string",
             "actual_label": "string",
+            "session_id": "string",
+            "batch_id": "string",
         },
     )
 
@@ -183,6 +234,12 @@ def main():
             df = load_supabase_dataframe(supabase_config)
         elif ANALYTICS_PATH.exists():
             df = load_csv_dataframe()
+        elif os.getenv("SUPABASE_URL") or os.getenv("SUPABASE_KEY"):
+            print(
+                "Raw Supabase evaluation requires SUPABASE_SERVICE_ROLE_KEY. "
+                "Set it locally or export analytics.csv."
+            )
+            return 1
         else:
             print("No analytics.csv found. Collect labeled samples in the app first.")
             return 0

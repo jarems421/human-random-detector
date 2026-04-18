@@ -15,6 +15,7 @@ from sklearn.model_selection import train_test_split
 from sklearn.naive_bayes import GaussianNB
 from sklearn.preprocessing import StandardScaler
 
+from calibration import build_calibration_report
 from features import extract_features
 from generate_data import create_dataset
 
@@ -77,6 +78,7 @@ def train_and_save_model(n_samples=1000, length=50, test_size=0.2, random_state=
         "roc_auc": float(roc_auc),
         "confusion_matrix": matrix.tolist(),
         "classification_report": report,
+        "calibration": build_calibration_report(y_test, y_prob_human),
     }
 
     joblib.dump(model, MODEL_PATH)

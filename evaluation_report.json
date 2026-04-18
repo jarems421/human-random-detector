@@ -43,5 +43,51 @@
       "f1-score": 0.8796358985932445,
       "support": 400.0
     }
+  },
+  "calibration": {
+    "brier_score": 0.10720909114659694,
+    "buckets": [
+      {
+        "lower": 0.0,
+        "upper": 0.2,
+        "count": 216,
+        "mean_predicted_human": 0.004092158727222627,
+        "actual_human_rate": 0.1388888888888889,
+        "calibration_gap": -0.13479673016166627
+      },
+      {
+        "lower": 0.2,
+        "upper": 0.4,
+        "count": 6,
+        "mean_predicted_human": 0.27967157481379384,
+        "actual_human_rate": 0.8333333333333334,
+        "calibration_gap": -0.5536617585195396
+      },
+      {
+        "lower": 0.4,
+        "upper": 0.6000000000000001,
+        "count": 1,
+        "mean_predicted_human": 0.5022130087570297,
+        "actual_human_rate": 0.0,
+        "calibration_gap": 0.5022130087570297
+      },
+      {
+        "lower": 0.6000000000000001,
+        "upper": 0.8,
+        "count": 3,
+        "mean_predicted_human": 0.6690612539557979,
+        "actual_human_rate": 0.3333333333333333,
+        "calibration_gap": 0.33572792062246454
+      },
+      {
+        "lower": 0.8,
+        "upper": 1.0,
+        "count": 174,
+        "mean_predicted_human": 0.9947990433191458,
+        "actual_human_rate": 0.9425287356321839,
+        "calibration_gap": 0.05227030768696195
+      }
+    ],
+    "summary": "Predicted human probabilities are somewhat higher than observed human rates."
   }
 }

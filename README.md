@@ -20,6 +20,8 @@ The model analyses properties such as entropy, transition behaviour, and structu
 
 Users can interact with the system through a web interface and attempt to "beat the model" by generating sequences that appear random.
 
+For the project write-up, evaluation results, and limitations, see [REPORT.md](REPORT.md).
+
 ---
 
 ## Key Features

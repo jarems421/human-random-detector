@@ -2,6 +2,23 @@ import math
 from collections import Counter
 
 
+FEATURE_NAMES = [
+    "entropy",
+    "markov_entropy",
+    "kl_divergence",
+    "longest_run",
+    "alternation_rate",
+    "balance_deviation",
+    "lag1_autocorrelation",
+    "run_count",
+    "mean_run_length",
+    "alternation_deviation",
+    "longest_alternating_run",
+    "near_alternation_score",
+    "pattern_break_rate",
+]
+
+
 def entropy(sequence):
     counts = Counter(sequence)
     probs = [count / len(sequence) for count in counts.values()]
@@ -140,3 +157,7 @@ def extract_features(sequence):
         near_alternation_score(sequence),
         pattern_break_rate(sequence),
     ]
+
+
+def extract_feature_dict(sequence):
+    return dict(zip(FEATURE_NAMES, extract_features(sequence)))

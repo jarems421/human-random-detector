@@ -2,7 +2,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from evaluate_real_data import build_evaluation, prepare_labeled_rows
+from evaluate_real_data import build_evaluation, get_supabase_config, prepare_labeled_rows
 
 
 def test_prepare_labeled_rows_maps_valid_labels():
@@ -70,3 +70,40 @@ def test_build_evaluation_skips_roc_auc_for_one_class():
     assert evaluation["roc_auc"] is None
     assert evaluation["accuracy"] == pytest.approx(0.5)
     assert evaluation["confusion_matrix"] == [[0, 0], [1, 1]]
+
+
+def test_prepare_labeled_rows_deduplicates_sequences():
+    df = pd.DataFrame(
+        [
+            {"sequence": "0101010101", "actual_label": "Human"},
+            {"sequence": "0101010101", "actual_label": "Human"},
+            {"sequence": " 01010 10101 ", "actual_label": "Human"},
+        ]
+    )
+
+    sequences, labels, skipped = prepare_labeled_rows(df)
+
+    assert sequences == ["0101010101"]
+    assert labels.tolist() == [1]
+    assert skipped["duplicate_sequence"] == 2
+
+
+def test_supabase_config_requires_service_role_key(monkeypatch):
+    monkeypatch.setenv("SUPABASE_URL", "https://example.supabase.co")
+    monkeypatch.setenv("SUPABASE_KEY", "anon-key")
+    monkeypatch.delenv("SUPABASE_SERVICE_ROLE_KEY", raising=False)
+
+    assert get_supabase_config() is None
+
+
+def test_supabase_config_uses_service_role_key(monkeypatch):
+    monkeypatch.setenv("SUPABASE_URL", "https://example.supabase.co")
+    monkeypatch.setenv("SUPABASE_KEY", "anon-key")
+    monkeypatch.setenv("SUPABASE_SERVICE_ROLE_KEY", "service-role-key")
+
+    config = get_supabase_config()
+
+    assert config == {
+        "url": "https://example.supabase.co",
+        "key": "service-role-key",
+    }
