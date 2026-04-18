@@ -789,6 +789,11 @@ def show_about_tab():
         "data matches human behavior."
     )
     st.write(
+        "A key part of the project is the dataset loop: real users submit sequences through "
+        "the deployed app, those labeled rows are stored in Supabase, and private evaluation "
+        "scripts compare the synthetic training assumptions against that self-collected data."
+    )
+    st.write(
         "The psychological idea is simple: people often know what randomness should look "
         "like, but their intuition pushes them toward sequences that feel random rather "
         "than sequences that behave randomly. The app turns that gap into something you "
@@ -800,14 +805,26 @@ def show_about_tab():
         [
             {"Stage": "1", "Milestone": "Simple binary classifier"},
             {"Stage": "2", "Milestone": "Interpretable feature extraction"},
-            {"Stage": "3", "Milestone": "Supabase real-user data logging"},
-            {"Stage": "4", "Milestone": "Real-data evaluation"},
-            {"Stage": "5", "Milestone": "Synthetic human generator upgrade"},
-            {"Stage": "6", "Milestone": "Challenge mode and explanations"},
-            {"Stage": "7", "Milestone": "Aggregate analytics and report"},
+            {"Stage": "3", "Milestone": "Deployed app for collecting real sequences"},
+            {"Stage": "4", "Milestone": "Self-collected Supabase dataset"},
+            {"Stage": "5", "Milestone": "Real-data evaluation"},
+            {"Stage": "6", "Milestone": "Synthetic human generator upgrade"},
+            {"Stage": "7", "Milestone": "Challenge mode, explanations, and report"},
         ]
     )
     st.dataframe(growth_df, hide_index=True, width="stretch")
+
+    st.write("Own-dataset feedback loop")
+    dataset_loop_df = pd.DataFrame(
+        [
+            {"Step": "1", "What happens": "A user submits a sequence in the app."},
+            {"Step": "2", "What happens": "The model predicts Human or Random and stores probabilities."},
+            {"Step": "3", "What happens": "Supabase saves the sequence, true label, session, and metadata."},
+            {"Step": "4", "What happens": "Private scripts evaluate the model on real labeled rows."},
+            {"Step": "5", "What happens": "The synthetic generator is checked against real behavior."},
+        ]
+    )
+    st.dataframe(dataset_loop_df, hide_index=True, width="stretch")
 
     st.write("What humans tend to do")
     st.caption(

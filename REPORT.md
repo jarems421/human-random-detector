@@ -6,7 +6,7 @@ The first version of this project was a simple idea: train a model to decide whe
 
 Can we measure the specific ways people fail to imitate randomness?
 
-The answer became the shape of the final system. The app now lets users try to fool the model, explains the behavioral patterns in their sequences, logs real submitted data, compares synthetic and real data, and reports calibration alongside ordinary accuracy metrics.
+The answer became the shape of the final system. The app now lets users try to fool the model, explains the behavioral patterns in their sequences, logs real submitted data, compares synthetic and real data, and reports calibration alongside ordinary accuracy metrics. A major part of the project is that the real benchmark was not downloaded from a standard dataset; it was collected through the deployed app itself.
 
 Figure 1: How the project evolved
 
@@ -15,6 +15,7 @@ timeline
     title Human Randomness Experiment Development
     Simple ML demo : Binary sequence classifier
     Feature engineering : Entropy, runs, alternation, balance
+    Deployed app : Users submit real sequences
     Supabase logging : Real user sequences and labels
     Real-data evaluation : Synthetic model checked against app data
     Generator upgrade : Human behaviors reweighted from observed patterns
@@ -44,7 +45,7 @@ Figure 2: Prediction and learning loop
 
 ```mermaid
 flowchart TD
-    A[Human or random sequence] --> B[Clean and validate input]
+    A[Real app submission] --> B[Clean and validate input]
     B --> C[Extract 13 statistical features]
     C --> D[Scale features]
     D --> E[Gaussian Naive Bayes model]
@@ -54,8 +55,9 @@ flowchart TD
     G --> I[Challenge feedback]
     H --> I
     I --> J[Supabase logging]
-    J --> K[Private real-data evaluation]
-    K --> L[Generator and report updates]
+    J --> K[Self-collected labeled dataset]
+    K --> L[Private real-data evaluation]
+    L --> M[Generator and report updates]
 ```
 
 The deployed app has five main parts:
@@ -92,6 +94,8 @@ The feature set is intentionally interpretable. The same measurements support bo
 
 The first synthetic human generator used a small set of behaviors selected uniformly. It included too many noisy human examples that looked almost indistinguishable from true random data. That made the synthetic class less focused on the human biases seen in real Supabase data.
 
+The important workflow was not "make synthetic data and trust it." The workflow was "train on controlled synthetic data, collect real user data, test the mismatch, then improve the generator." That self-collected evaluation loop is what made the project more rigorous.
+
 The upgraded generator keeps the random class unchanged and reweights the human class:
 
 Figure 3: Upgraded synthetic human mix
@@ -106,6 +110,18 @@ pie title Synthetic human behavior weights
 ```
 
 This generator better represents broad human randomness mistakes without overfitting to one person's style.
+
+Figure 4: Own-dataset feedback loop
+
+```mermaid
+flowchart TD
+    A[Deployed Streamlit challenge] --> B[Users submit human/random sequences]
+    B --> C[Supabase stores labels, predictions, probabilities, metadata]
+    C --> D[Private evaluation scripts]
+    D --> E[Real-data metrics and pattern analysis]
+    E --> F[Generator weights and documentation updates]
+    F --> G[Retrained model artifacts]
+```
 
 ## 6. Evaluation Results
 
@@ -152,7 +168,7 @@ This layer is heuristic. It explains the visible sequence patterns, not the exac
 
 The app originally exposed recent raw rows for convenience. The upgraded version moves toward aggregate-only public analytics. Public visitors can see counts and rates, but raw submitted sequences and session identifiers are reserved for private evaluation scripts.
 
-Figure 4: Public vs private data access
+Figure 5: Public vs private data access
 
 ```mermaid
 flowchart LR

@@ -8,7 +8,7 @@ For the full project narrative, evaluation results, and limitations, see [REPORT
 
 ## What This Project Became
 
-This started as a small classifier for binary strings. It grew into a portfolio-grade behavioral ML system with a deployed app, Supabase-backed data collection, explainable predictions, real-data evaluation, aggregate analytics, calibration diagnostics, tests, and a written research report.
+This started as a small classifier for binary strings. It grew into a portfolio-grade behavioral ML system with a deployed app, a self-collected Supabase dataset of real user submissions, explainable predictions, real-data evaluation, aggregate analytics, calibration diagnostics, tests, and a written research report.
 
 Figure 1: Project growth over time
 
@@ -16,11 +16,12 @@ Figure 1: Project growth over time
 flowchart LR
     A[Simple classifier] --> B[Feature engineering]
     B --> C[Synthetic human generator]
-    C --> D[Supabase real-user data]
-    D --> E[Real-data evaluation]
-    E --> F[Improved synthetic generator]
-    F --> G[Challenge mode and explanations]
-    G --> H[Aggregate analytics and report]
+    C --> D[Deployed app]
+    D --> E[Own Supabase dataset]
+    E --> F[Real-data evaluation]
+    F --> G[Improved synthetic generator]
+    G --> H[Challenge mode and explanations]
+    H --> I[Aggregate analytics and report]
 ```
 
 ## Why It Is Interesting
@@ -44,16 +45,17 @@ Figure 2: App and evaluation loop
 
 ```mermaid
 flowchart TD
-    U[User enters sequence] --> V[Validation]
-    V --> F[Feature extraction]
+    U[Real users enter sequences] --> V[Validation]
+    V --> F[13-feature extraction]
     F --> M[Gaussian Naive Bayes model]
     F --> X[Explanation signals]
     M --> P[Prediction and confidence]
-    P --> A[Challenge feedback]
-    X --> A
-    A --> S[Supabase analytics]
-    S --> R[Private real-data evaluation]
+    X --> P
+    P --> S[Logged to Supabase]
+    S --> D[Self-collected labeled dataset]
+    D --> R[Private real-data evaluation]
     R --> G[Synthetic generator tuning]
+    G --> M
 ```
 
 ## Key Features
@@ -62,7 +64,7 @@ flowchart TD
 - One-off sequence analysis
 - Plain-language explanation cards
 - Synthetic human data generation based on observed human biases
-- Supabase logging for real submitted data
+- Self-collected Supabase dataset of real submitted data
 - Aggregate-only public analytics
 - Private real-data evaluation scripts
 - Calibration diagnostics
@@ -125,6 +127,17 @@ The stronger check was real app data. Against 378 labeled Supabase rows, the upg
 
 The model kept human recall stable while reducing false human predictions on random sequences.
 
+Figure 3: Synthetic assumptions checked against self-collected data
+
+```mermaid
+flowchart LR
+    A[Synthetic training data] --> B[Initial model]
+    C[Real users in deployed app] --> D[Supabase labeled dataset]
+    D --> E[Real-data evaluation]
+    E --> F[Generator upgrade]
+    F --> G[Retrained production artifacts]
+```
+
 Current synthetic confusion matrix:
 
 | Actual \ Predicted | Random | Human |
@@ -132,7 +145,7 @@ Current synthetic confusion matrix:
 | Random | 187 | 13 |
 | Human | 35 | 165 |
 
-Figure 3: Evaluation surfaces
+Figure 4: Evaluation surfaces
 
 ```mermaid
 flowchart LR
