@@ -348,16 +348,24 @@ with tab_collect:
     st.subheader("Collect labeled examples")
     st.write("Use this when the source is known. The model predicts from the sequence only; the source label is saved for evaluation.")
 
-    human_col, random_col = st.columns([2, 1])
+    st.write("Step 1: choose what kind of data you are adding.")
+    collection_mode = st.radio(
+        "Known source",
+        ["Human sequences", "Random sequences"],
+        horizontal=True,
+        help="Choose Human when the sequences were typed by a person. Choose Random for generated rows.",
+    )
 
-    with human_col:
-        st.write("Human sequences")
+    st.write("Step 2: enter or generate the data.")
+
+    if collection_mode == "Human sequences":
         human_input = st.text_area(
             "Paste one human-made sequence per line",
-            height=180,
+            height=220,
             placeholder="01001101011000100110\n10100100101101001010",
             help="Blank lines are ignored. Spaces inside a sequence are okay.",
         )
+        st.caption("Tip: type several attempts in a notes app or text editor, then paste them here together.")
 
         if st.button("Save Human Sequences", type="primary", width="stretch"):
             saved_rows = 0
@@ -398,14 +406,14 @@ with tab_collect:
             else:
                 st.info("Paste at least one sequence first.")
 
-    with random_col:
-        st.write("Random sequences")
+    else:
         random_count = st.number_input(
             "Rows to generate",
             min_value=1,
             max_value=50,
             value=5,
             step=1,
+            help="Generated rows are automatically labeled Random.",
         )
 
         if st.button("Generate And Save Random Rows", type="primary", width="stretch"):
