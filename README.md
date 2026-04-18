@@ -6,24 +6,37 @@ Live demo: https://human-random-detector-yeexavmafyev6jxjpgzpx9.streamlit.app/
 
 For the full project narrative, evaluation results, and limitations, see [REPORT.md](REPORT.md).
 
+## Headline Result
+
+The current production model is **real-core hybrid trained**: real Supabase submissions are the main training signal, with capped synthetic support for coverage and class balance.
+
+| Result | Value |
+|---|---:|
+| Self-collected raw Supabase rows | 468 |
+| Deduplicated real evaluation rows | 455 |
+| Real-data accuracy | 0.910 |
+| Real-data ROC AUC | 0.970 |
+| Human precision | 0.937 |
+| Human recall | 0.845 |
+| Random recall | 0.958 |
+
+The real-core candidate was promoted only after it beat the previous synthetic-only baseline on the same held-out real split.
+
 ## What This Project Became
 
 This started as a small classifier for binary strings. It grew into a portfolio-grade behavioral ML system with a deployed app, a self-collected Supabase dataset of real user submissions, real-core hybrid training, explainable predictions, aggregate analytics, calibration diagnostics, tests, and a written research report.
 
 Figure 1: Project growth over time
 
-```text
-Simple classifier
-  -> Feature engineering
-  -> Synthetic human generator
-  -> Deployed app
-  -> Own Supabase dataset
-  -> Real-data evaluation
-  -> Improved synthetic generator
-  -> Real-core hybrid training
-  -> Challenge mode and explanations
-  -> Aggregate analytics and report
-```
+| Stage | What changed |
+|---:|---|
+| 1 | Built a simple binary sequence classifier. |
+| 2 | Added interpretable features for entropy, runs, balance, and alternation. |
+| 3 | Deployed the Streamlit app and collected real user submissions in Supabase. |
+| 4 | Evaluated synthetic assumptions against the self-collected dataset. |
+| 5 | Improved the synthetic human generator from real-data observations. |
+| 6 | Trained and promoted a real-core hybrid model with held-out real validation. |
+| 7 | Added challenge mode, explanations, aggregate analytics, calibration, tests, and report. |
 
 ## Why It Is Interesting
 
@@ -45,17 +58,14 @@ The app does not just say "Human" or "Random." It also tells the user why:
 Figure 2: App and evaluation loop
 
 ```text
-Real users enter sequences
-  -> validation
-  -> 13-feature extraction
-  -> Gaussian Naive Bayes prediction
-  -> explanation signals
-  -> challenge feedback
-  -> Supabase logging
-  -> self-collected labeled dataset
-  -> private real-data evaluation
-  -> real-core hybrid training
-  -> production model promotion gate
+1. Real users enter sequences in the deployed app.
+2. The app validates input and extracts 13 statistical features.
+3. The model predicts Human or Random and explains the visible pattern signals.
+4. Supabase stores the sequence, label, probabilities, metadata, and model version.
+5. Private scripts split the self-collected dataset into train/test groups.
+6. Real rows train the core model; capped synthetic rows provide support.
+7. A promotion gate compares the candidate against the previous baseline.
+8. Production artifacts update only if the held-out real metrics pass.
 ```
 
 ## Key Features
@@ -108,6 +118,13 @@ The random class is generated with true random bit selection. The human class is
 
 ## Results
 
+Figure 3: Two-step evidence path
+
+| Step | Evidence | Outcome |
+|---|---|---|
+| Synthetic generator upgrade | Synthetic holdout metrics improved and real-data metrics stayed strong. | Better synthetic assumptions. |
+| Real-core hybrid training | Candidate beat the previous production baseline on the same held-out real split. | Promoted production model. |
+
 The first major upgrade improved the synthetic human generator:
 
 | Metric | Before | After |
@@ -137,14 +154,15 @@ On the full deduplicated private real-data evaluation, the promoted model reache
 | Human recall | 0.845 |
 | Random recall | 0.958 |
 
-Figure 3: Synthetic assumptions checked against self-collected data
+Figure 4: Real-core promotion gate
 
 ```text
-Real deployed users      -> Supabase labeled dataset
-Supabase training split  -> real-core model signal
-Synthetic data           -> capped support rows
-Held-out real split      -> promotion gate
-Promotion passed         -> production artifacts updated
+Real deployed users       -> Supabase labeled dataset
+Deduped real rows         -> grouped train/test split
+Real training split       -> primary model signal
+Capped synthetic rows     -> support for coverage and class balance
+Held-out real split       -> baseline vs candidate comparison
+Promotion gate passed     -> model.pkl and scaler.pkl updated
 ```
 
 Current synthetic-holdout check for the promoted production model:
@@ -154,7 +172,7 @@ Current synthetic-holdout check for the promoted production model:
 | Random | 196 | 4 |
 | Human | 53 | 147 |
 
-Figure 4: Evaluation surfaces
+Figure 5: Evaluation surfaces
 
 | Evaluation surface | Purpose |
 |---|---|
@@ -162,6 +180,7 @@ Figure 4: Evaluation surfaces
 | Supabase real-data report | Checks production performance on self-collected real submissions. |
 | Calibration buckets | Checks whether probabilities are trustworthy. |
 | Real-vs-synthetic feature comparison | Checks whether synthetic assumptions match collected behavior. |
+| Real-core training report | Saves the exact split, group IDs, weights, candidate metrics, and promotion decision. |
 
 ## Project Structure
 
@@ -172,7 +191,9 @@ human-random-detector/
     features.py               Feature extraction
     explanations.py           Plain-language explanation signals
     generate_data.py          Synthetic random/human generators
-    train_model.py            Training and synthetic evaluation
+    real_data.py              Shared real-data cleaning/loading helpers
+    train_model.py            Synthetic-only baseline training
+    train_real_core_model.py  Real-core hybrid training and promotion gate
     evaluate_real_data.py     Private real-data evaluation
     analyze_real_patterns.py  Real behavior pattern analysis
     compare_synthetic_real.py Real-vs-synthetic feature comparison
@@ -180,6 +201,8 @@ human-random-detector/
   model.pkl                   Trained model artifact
   scaler.pkl                  Trained scaler artifact
   evaluation_report.json      Synthetic evaluation report
+  real_core_training_report.json Real-core promotion report
+  real_data_evaluation.json   Private real-data evaluation report
   supabase_schema.sql         Supabase schema and aggregate view
   REPORT.md                   Full write-up
 ```
@@ -212,7 +235,7 @@ python src/train_model.py
 ## Run Tests
 
 ```powershell
-python -m py_compile src\app.py src\features.py src\evaluate_real_data.py src\analyze_real_patterns.py src\explanations.py src\analytics_summary.py src\calibration.py src\compare_synthetic_real.py src\train_model.py
+python -m py_compile src\app.py src\features.py src\evaluate_real_data.py src\analyze_real_patterns.py src\explanations.py src\analytics_summary.py src\calibration.py src\compare_synthetic_real.py src\train_model.py src\real_data.py src\train_real_core_model.py
 .\venv\Scripts\python.exe -m pytest
 ```
 
