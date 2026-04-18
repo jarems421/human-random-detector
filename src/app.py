@@ -285,7 +285,7 @@ if "score" not in st.session_state:
 for i in range(BATCH_SIZE):
     st.session_state.setdefault(f"seq_{i}", "")
     st.session_state.setdefault(f"actual_{i}", "Human")
-    st.session_state.setdefault(f"guess_{i}", "Human")
+    st.session_state.setdefault(f"guess_{i}", "No guess")
 
 st.title("Human vs Random Sequence Detector")
 st.write("Analyze a bit sequence, collect labeled examples, and track how the model performs on real inputs.")
@@ -451,14 +451,14 @@ with tab_collect:
                 for i in range(BATCH_SIZE):
                     st.session_state[f"seq_{i}"] = generate_random_sequence()
                     st.session_state[f"actual_{i}"] = "Random"
-                    st.session_state[f"guess_{i}"] = "Random"
+                    st.session_state[f"guess_{i}"] = "No guess"
 
         with action_col_2:
             if st.button("Clear batch", width="stretch"):
                 for i in range(BATCH_SIZE):
                     st.session_state[f"seq_{i}"] = ""
                     st.session_state[f"actual_{i}"] = "Human"
-                    st.session_state[f"guess_{i}"] = "Human"
+                    st.session_state[f"guess_{i}"] = "No guess"
 
         st.divider()
 
@@ -484,7 +484,7 @@ with tab_collect:
             with guess_col:
                 st.radio(
                     "Your guess",
-                    ["Human", "Random"],
+                    ["No guess", "Human", "Random"],
                     key=f"guess_{i}",
                     horizontal=True,
                 )
@@ -500,7 +500,8 @@ with tab_collect:
                     continue
 
                 actual_label = st.session_state[f"actual_{i}"]
-                user_guess = st.session_state[f"guess_{i}"]
+                raw_user_guess = st.session_state[f"guess_{i}"]
+                user_guess = None if raw_user_guess == "No guess" else raw_user_guess
 
                 try:
                     result = save_collected_sequence(
@@ -513,13 +514,15 @@ with tab_collect:
                     continue
 
                 model_correct = result["prediction"] == actual_label
-                user_correct = user_guess == actual_label
+                user_correct = user_guess == actual_label if user_guess else None
 
                 st.write(f"Example {i + 1}: `{sequence}`")
-                st.write(f"Actual: {actual_label} | Model: {result['prediction']} | Your guess: {user_guess}")
+                st.write(f"Actual: {actual_label} | Model: {result['prediction']} | Your guess: {user_guess or 'No guess'}")
                 st.write(f"Confidence: {result['confidence']:.2f}")
 
-                if user_correct and not model_correct:
+                if user_guess is None:
+                    st.info("Saved without a user guess.")
+                elif user_correct and not model_correct:
                     st.success("You beat the model on this one.")
                     st.session_state.score += 1
                 elif user_correct and model_correct:
